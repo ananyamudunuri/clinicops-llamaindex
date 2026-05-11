@@ -1,0 +1,9 @@
+Clinic Insurance Policy
+
+Patients must provide insurance details before their visit.
+
+The clinic accepts most major commercial insurance plans.
+
+Medicaid acceptance depends on the patient's state and plan network.
+
+Prior authorization may be required for specialist visits, imaging, or certain procedures.

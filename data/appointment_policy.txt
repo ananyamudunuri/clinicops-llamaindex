@@ -1,0 +1,9 @@
+Clinic Appointment Policy
+
+Patients should arrive 15 minutes before their appointment.
+
+Appointments can be cancelled or rescheduled up to 24 hours before the visit.
+
+If a patient cancels less than 24 hours before the appointment, it is considered a late cancellation.
+
+After three no-shows, the patient may need approval from the clinic administrator before booking again.
