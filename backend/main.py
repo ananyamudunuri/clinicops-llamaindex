@@ -55,8 +55,9 @@ Settings.llm = Anthropic(
     api_key=ANTHROPIC_API_KEY,
 )
 
-Settings.embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+# Settings.embed_model = HuggingFaceEmbedding(
+#    model_name="sentence-transformers/all-MiniLM-L6-v2"
+Settings.embed_model = MockEmbedding(embed_dim=384)
 )
 
 anthropic_client = AnthropicClient(
