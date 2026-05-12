@@ -4,10 +4,6 @@ python-dotenv
 llama-index==0.14.21
 llama-index-core==0.14.21
 llama-index-llms-anthropic==0.11.4
-llama-index-embeddings-huggingface==0.7.0
-sentence-transformers==3.3.1
-transformers==4.46.3
-torch
 pypdf
 python-multipart
 anthropic
