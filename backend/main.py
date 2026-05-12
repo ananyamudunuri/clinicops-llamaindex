@@ -15,8 +15,8 @@ from anthropic import Anthropic as AnthropicClient
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.llms.anthropic import Anthropic
-## from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.core.embeddings import MockEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+## from llama_index.core.embeddings import MockEmbedding
 
 from llama_index.core.tools import QueryEngineTool, FunctionTool
 from llama_index.core.query_engine import RouterQueryEngine
@@ -55,9 +55,9 @@ Settings.llm = Anthropic(
     api_key=ANTHROPIC_API_KEY,
 )
 
-# Settings.embed_model = HuggingFaceEmbedding(
-#    model_name="sentence-transformers/all-MiniLM-L6-v2"
-Settings.embed_model = MockEmbedding(embed_dim=384)
+Settings.embed_model = HuggingFaceEmbedding(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+# Settings.embed_model = MockEmbedding(embed_dim=384)
 )
 
 anthropic_client = AnthropicClient(
