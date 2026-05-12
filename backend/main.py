@@ -1,4 +1,6 @@
 import os
+import io
+import re
 import base64
 import mimetypes
 from pathlib import Path
@@ -7,6 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pypdf import PdfReader
 
 from anthropic import Anthropic as AnthropicClient
 
@@ -77,6 +80,7 @@ def home():
             "/exercises",
             "/documents",
             "/documents/{filename}",
+            "/documents/upload",
             "/basic-rag/query",
             "/router-rag/query",
             "/subquestion-rag/query",
@@ -103,7 +107,7 @@ def list_exercises():
                 "id": 1,
                 "name": "Basic RAG",
                 "route": "/basic-rag/query",
-                "description": "Answers questions from clinic documents using vector search.",
+                "description": "Answers questions from all clinic documents using vector search.",
             },
             {
                 "id": 2,
@@ -125,9 +129,9 @@ def list_exercises():
             },
             {
                 "id": 5,
-                "name": "Multi Document Agent",
+                "name": "Dynamic Multi Document Agent",
                 "route": "/multi-doc-agent/query",
-                "description": "Uses separate document tools to answer multi-document questions.",
+                "description": "Automatically creates tools from every .txt document in the data folder.",
             },
             {
                 "id": 6,
@@ -146,16 +150,36 @@ def list_exercises():
 ALLOWED_DOC_EXTENSIONS = [".txt"]
 
 
+def clean_filename(filename: str) -> str:
+    filename = filename.replace(" ", "_")
+    filename = re.sub(r"[^a-zA-Z0-9_.-]", "", filename)
+    return filename
+
+
 def safe_document_path(filename: str) -> Path:
+    filename = clean_filename(filename)
     file_path = (DATA_PATH / filename).resolve()
 
     if DATA_PATH.resolve() not in file_path.parents and file_path != DATA_PATH.resolve():
         raise HTTPException(status_code=400, detail="Invalid file path")
 
     if file_path.suffix not in ALLOWED_DOC_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Only .txt files are supported")
+        raise HTTPException(status_code=400, detail="Only editable .txt files are supported")
 
     return file_path
+
+
+def get_all_document_names():
+    if not DATA_PATH.exists():
+        return []
+
+    return sorted(
+        [
+            file_path.name
+            for file_path in DATA_PATH.iterdir()
+            if file_path.is_file() and file_path.suffix == ".txt"
+        ]
+    )
 
 
 @app.get("/documents")
@@ -167,13 +191,15 @@ def list_documents():
             DATA_PATH.mkdir(parents=True, exist_ok=True)
 
         for file_path in DATA_PATH.iterdir():
-            if file_path.is_file() and file_path.suffix in ALLOWED_DOC_EXTENSIONS:
+            if file_path.is_file() and file_path.suffix == ".txt":
                 documents.append(
                     {
                         "filename": file_path.name,
                         "path": str(file_path),
                     }
                 )
+
+        documents.sort(key=lambda x: x["filename"])
 
         return {"documents": documents}
 
@@ -221,6 +247,181 @@ def update_document(filename: str, request: DocumentUpdateRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/documents/{filename}")
+def delete_document(filename: str):
+    try:
+        file_path = safe_document_path(filename)
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        file_path.unlink()
+
+        return {
+            "message": "Document deleted successfully",
+            "filename": filename,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/documents/upload")
+async def upload_document(file: UploadFile = File(...)):
+    try:
+        if not DATA_PATH.exists():
+            DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+        original_filename = file.filename
+
+        if not original_filename:
+            raise HTTPException(status_code=400, detail="Filename is missing")
+
+        cleaned_name = clean_filename(original_filename)
+        suffix = Path(cleaned_name).suffix.lower()
+
+        file_bytes = await file.read()
+
+        if suffix == ".txt":
+            try:
+                content = file_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                content = file_bytes.decode("latin-1")
+
+            final_filename = cleaned_name
+
+        elif suffix == ".pdf":
+            pdf_reader = PdfReader(io.BytesIO(file_bytes))
+            extracted_pages = []
+
+            for page_num, page in enumerate(pdf_reader.pages, start=1):
+                page_text = page.extract_text() or ""
+                extracted_pages.append(f"\n--- Page {page_num} ---\n{page_text}")
+
+            content = "\n".join(extracted_pages).strip()
+
+            if not content:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not extract text from this PDF. It may be scanned/image-based.",
+                )
+
+            pdf_stem = Path(cleaned_name).stem
+            final_filename = f"{pdf_stem}_extracted.txt"
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Only .txt and .pdf files are supported.",
+            )
+
+        file_path = safe_document_path(final_filename)
+        file_path.write_text(content, encoding="utf-8")
+
+        return {
+            "message": "Document uploaded successfully",
+            "original_filename": original_filename,
+            "saved_as": final_filename,
+            "size_bytes": len(file_bytes),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------
+# Source Tracking Helpers
+# ---------------------------------------------------------
+
+def extract_sources_from_response(response, max_sources: int = 5):
+    sources = []
+    seen = set()
+
+    source_nodes = getattr(response, "source_nodes", []) or []
+
+    for source_node in source_nodes:
+        node = getattr(source_node, "node", None)
+        if node is None:
+            continue
+
+        metadata = getattr(node, "metadata", {}) or {}
+
+        file_name = (
+            metadata.get("file_name")
+            or metadata.get("filename")
+            or Path(metadata.get("file_path", "")).name
+            or "Unknown document"
+        )
+
+        try:
+            text = node.get_content()
+        except Exception:
+            text = getattr(node, "text", "")
+
+        excerpt = " ".join((text or "").split())
+        excerpt = excerpt[:700]
+
+        if not excerpt:
+            continue
+
+        key = f"{file_name}:{excerpt[:120]}"
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        score = getattr(source_node, "score", None)
+
+        sources.append(
+            {
+                "document": file_name,
+                "score": round(float(score), 4) if score is not None else None,
+                "excerpt": excerpt,
+            }
+        )
+
+        if len(sources) >= max_sources:
+            break
+
+    return sources
+
+
+def unique_documents_from_sources(sources):
+    documents = []
+
+    for source in sources:
+        document = source.get("document")
+
+        if document and document not in documents:
+            documents.append(document)
+
+    return documents
+
+
+def clean_final_answer_prompt(question: str, raw_answer: str) -> str:
+    return f"""
+User question:
+{question}
+
+Raw answer:
+{raw_answer}
+
+Rewrite the answer in clean, professional plain English.
+
+Rules:
+- Do not use markdown tables.
+- Do not use # headings.
+- Do not use **bold markdown**.
+- Do not use unnecessary symbols.
+- Keep the answer concise and clear.
+"""
 
 
 # ---------------------------------------------------------
@@ -316,10 +517,19 @@ def basic_rag_query(request: QueryRequest):
         query_engine = build_basic_rag_engine()
         response = query_engine.query(request.question)
 
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(request.question, str(response))
+        )
+
+        sources = extract_sources_from_response(response)
+
         return {
             "exercise": "Basic RAG",
             "question": request.question,
-            "answer": str(response),
+            "answer": str(clean_response),
+            "accessed_documents": get_all_document_names(),
+            "source_documents": unique_documents_from_sources(sources),
+            "sources": sources,
         }
 
     except Exception as e:
@@ -351,10 +561,19 @@ def router_rag_query(request: QueryRequest):
         router_engine = build_router_query_engine()
         response = router_engine.query(request.question)
 
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(request.question, str(response))
+        )
+
+        sources = extract_sources_from_response(response)
+
         return {
             "exercise": "Router Query Engine",
             "question": request.question,
-            "answer": str(response),
+            "answer": str(clean_response),
+            "accessed_documents": unique_documents_from_sources(sources),
+            "source_documents": unique_documents_from_sources(sources),
+            "sources": sources,
         }
 
     except Exception as e:
@@ -383,6 +602,11 @@ def build_custom_subquestion_response(question: str):
         billing_answer = billing_engine.query(question)
         insurance_answer = insurance_engine.query(question)
 
+        all_sources = []
+        all_sources.extend(extract_sources_from_response(appointment_answer, max_sources=2))
+        all_sources.extend(extract_sources_from_response(billing_answer, max_sources=2))
+        all_sources.extend(extract_sources_from_response(insurance_answer, max_sources=2))
+
         synthesis_prompt = f"""
 User question:
 {question}
@@ -408,6 +632,7 @@ Do not use markdown formatting.
             "billing_answer": str(billing_answer),
             "insurance_answer": str(insurance_answer),
             "final_answer": str(final_response),
+            "sources": all_sources,
         }
 
     except Exception as e:
@@ -419,6 +644,12 @@ def subquestion_rag_query(request: QueryRequest):
     try:
         result = build_custom_subquestion_response(request.question)
 
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(request.question, result["final_answer"])
+        )
+
+        sources = result["sources"]
+
         return {
             "exercise": "Custom SubQuestion RAG",
             "question": request.question,
@@ -427,7 +658,14 @@ def subquestion_rag_query(request: QueryRequest):
                 "billing_policy": result["billing_answer"],
                 "insurance_policy": result["insurance_answer"],
             },
-            "answer": result["final_answer"],
+            "answer": str(clean_response),
+            "accessed_documents": [
+                "appointment_policy.txt",
+                "billing_policy.txt",
+                "insurance_policy.txt",
+            ],
+            "source_documents": unique_documents_from_sources(sources),
+            "sources": sources,
         }
 
     except Exception as e:
@@ -517,9 +755,26 @@ async def build_react_agent_response(question: str):
             llm=Settings.llm,
         )
 
-        response = await agent.run(question)
+        agent_question = f"""
+{question}
 
-        return str(response)
+Please answer in clean professional plain English.
+Do not use markdown tables, # headings, or **bold markdown**.
+"""
+
+        response = await agent.run(agent_question)
+
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(question, str(response))
+        )
+
+        source_probe_response = policy_query_engine.query(question)
+        sources = extract_sources_from_response(source_probe_response)
+
+        return {
+            "answer": str(clean_response),
+            "sources": sources,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -528,12 +783,15 @@ async def build_react_agent_response(question: str):
 @app.post("/react-agent/query")
 async def react_agent_query(request: QueryRequest):
     try:
-        response = await build_react_agent_response(request.question)
+        result = await build_react_agent_response(request.question)
 
         return {
             "exercise": "ReAct Agent",
             "question": request.question,
-            "answer": response,
+            "answer": result["answer"],
+            "accessed_documents": get_all_document_names(),
+            "source_documents": unique_documents_from_sources(result["sources"]),
+            "sources": result["sources"],
         }
 
     except Exception as e:
@@ -541,62 +799,106 @@ async def react_agent_query(request: QueryRequest):
 
 
 # ---------------------------------------------------------
-# Exercise 5: Multi Document Agent
+# Exercise 5: Dynamic Multi Document Agent
 # ---------------------------------------------------------
+
+def build_dynamic_document_tools():
+    try:
+        tools = []
+
+        if not DATA_PATH.exists():
+            raise HTTPException(status_code=400, detail="Data folder not found.")
+
+        txt_files = list(DATA_PATH.glob("*.txt"))
+
+        if not txt_files:
+            raise HTTPException(
+                status_code=400,
+                detail="No .txt documents found in data folder.",
+            )
+
+        for file_path in txt_files:
+            document_engine = build_single_file_query_engine(str(file_path))
+
+            tool_name = file_path.stem.replace("-", "_").replace(" ", "_")
+            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
+
+            document_tool = QueryEngineTool.from_defaults(
+                query_engine=document_engine,
+                name=f"{tool_name}_document_tool",
+                description=(
+                    f"Use this tool to answer questions from the document named "
+                    f"{file_path.name}. This document may contain clinic policies, "
+                    f"uploaded user documents, billing details, insurance rules, "
+                    f"appointment information, or other clinic-related content."
+                ),
+            )
+
+            tools.append(document_tool)
+
+        return tools
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def collect_sources_from_all_documents(question: str):
+    all_sources = []
+    accessed_documents = []
+
+    for file_path in sorted(DATA_PATH.glob("*.txt")):
+        accessed_documents.append(file_path.name)
+
+        try:
+            engine = build_single_file_query_engine(str(file_path))
+            response = engine.query(question)
+            sources = extract_sources_from_response(response, max_sources=1)
+            all_sources.extend(sources)
+        except Exception:
+            continue
+
+    return accessed_documents, all_sources
+
 
 async def build_multi_doc_agent_response(question: str):
     try:
-        appointment_engine = build_single_file_query_engine(
-            str(DATA_PATH / "appointment_policy.txt")
-        )
-
-        billing_engine = build_single_file_query_engine(
-            str(DATA_PATH / "billing_policy.txt")
-        )
-
-        insurance_engine = build_single_file_query_engine(
-            str(DATA_PATH / "insurance_policy.txt")
-        )
-
-        appointment_tool = QueryEngineTool.from_defaults(
-            query_engine=appointment_engine,
-            name="appointment_document_agent",
-            description=(
-                "Use this document agent for appointment-related questions, "
-                "including cancellations, rescheduling, no-shows, and arrival time."
-            ),
-        )
-
-        billing_tool = QueryEngineTool.from_defaults(
-            query_engine=billing_engine,
-            name="billing_document_agent",
-            description=(
-                "Use this document agent for billing-related questions, "
-                "including fees, payment plans, out-of-pocket payments, and billing support."
-            ),
-        )
-
-        insurance_tool = QueryEngineTool.from_defaults(
-            query_engine=insurance_engine,
-            name="insurance_document_agent",
-            description=(
-                "Use this document agent for insurance-related questions, "
-                "including Medicaid, prior authorization, coverage, and plan networks."
-            ),
-        )
+        document_tools = build_dynamic_document_tools()
 
         agent = ReActAgent(
-            tools=[
-                appointment_tool,
-                billing_tool,
-                insurance_tool,
-            ],
+            tools=document_tools,
             llm=Settings.llm,
         )
 
-        response = await agent.run(question)
+        clean_question = f"""
+User question:
+{question}
 
-        return str(response)
+Answer clearly in plain English.
+
+Rules:
+- Mention which document or documents were useful.
+- Do not use markdown tables.
+- Do not use # headings.
+- Do not use **bold markdown**.
+- Do not use unnecessary symbols.
+- Keep the answer concise and professional.
+"""
+
+        response = await agent.run(clean_question)
+
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(question, str(response))
+        )
+
+        accessed_documents, sources = collect_sources_from_all_documents(question)
+
+        return {
+            "answer": str(clean_response),
+            "accessed_documents": accessed_documents,
+            "sources": sources,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -605,12 +907,15 @@ async def build_multi_doc_agent_response(question: str):
 @app.post("/multi-doc-agent/query")
 async def multi_doc_agent_query(request: QueryRequest):
     try:
-        response = await build_multi_doc_agent_response(request.question)
+        result = await build_multi_doc_agent_response(request.question)
 
         return {
-            "exercise": "Multi Document Agent",
+            "exercise": "Dynamic Multi Document Agent",
             "question": request.question,
-            "answer": response,
+            "answer": result["answer"],
+            "accessed_documents": result["accessed_documents"],
+            "source_documents": unique_documents_from_sources(result["sources"]),
+            "sources": result["sources"],
         }
 
     except Exception as e:
@@ -695,12 +1000,25 @@ Formatting rules:
 
         answer = "\n".join(answer_parts)
 
+        clean_response = Settings.llm.complete(
+            clean_final_answer_prompt(question, answer)
+        )
+
         return {
             "exercise": "Multi Modal RAG",
             "filename": file.filename,
             "mime_type": mime_type,
             "question": question,
-            "answer": answer,
+            "answer": str(clean_response),
+            "accessed_documents": [file.filename],
+            "source_documents": [file.filename],
+            "sources": [
+                {
+                    "document": file.filename,
+                    "score": None,
+                    "excerpt": "This answer was generated from the uploaded image file.",
+                }
+            ],
         }
 
     except Exception as e:

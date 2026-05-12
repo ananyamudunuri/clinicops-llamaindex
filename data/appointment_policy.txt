@@ -1,9 +1,59 @@
-Clinic Appointment Policy
+Policy Statement
+Rula’s goal is to provide world-class support and care for our patients. We collaborate with our providers to ensure that our patients receive life-changing treatment.
 
-Patients should arrive 15 minutes before their appointment.
+This policy ensures that Rula outlines provider attendance requirements for scheduled appointments with patients and the process for addressing patient no-shows. 
 
-Appointments can be cancelled or rescheduled up to 24 hours before the visit.
+Applicability:
+This policy applies to all team members. For purposes of this policy, the Companies’ team members include individuals who would be considered part of the workforce, such as employees, independent contractors, and other persons whose work performance is under the direct purview of the Companies’  business practices.
 
-If a patient cancels less than 24 hours before the appointment, it is considered a late cancellation.
+ Definitions
 
-After three no-shows, the patient may need approval from the clinic administrator before booking again.
+No-show: any missed appointment without notification of needing to cancel the appointment; a no-show will be assessed 15 minutes after the scheduled appointment start time
+
+Late Cancellation: appointment cancellation less than 24 hours before the appointment time; a late cancellation is equivalent to a no-show as defined above,
+
+Policy
+A. Provider Late Arrival/No-Show/Late Cancellation
+
+To ensure that patients receive the best care, providers agree to:
+
+Arrive on time to scheduled appointments with patients
+
+Connect with their existing patients prior to making any adjustments to the patient’s appointment time or connect with Support when a first/new patient appointment needs to be adjusted. 
+
+Follow patient outreach procedures for late arrivals, as specified in section C.  
+
+Make every attempt to hold the session via phone or other HIPAA compliant video platform alternative if the telemedicine platform through the EHR is not functional.
+Notify patients immediately when the provider has an emergency and scheduled appointments need to be canceled or rescheduled. 
+Upon notification that a provider was late to a scheduled appointment or the provider no-showed a scheduled appointment with a patient, Rula will attempt to connect with the provider. 
+After three (3) instances of a provider arriving late/no-showing scheduled appointments, the situation will be investigated by Rula’s Quality Team and appropriate action steps will be taken to prevent the behavior from continuing to impact patient care.  
+B. Patient No-Show/Late Cancellation
+
+At the time of registration, patients sign an acknowledgement of the “Cancellation and No-Show” policy. This policy states that if a patient cancels within 24 hours of their appointment, arrives more than fifteen (15) minutes late to an appointment, or if they no-show for their appointment, they will be charged a no show fee for that session.  For a list of exceptions to this rule, see No-Show Requirements. This policy does not apply to appointment “holds” for new patients, as they are not confirmed appointments. 
+Patients shall not be charged for no shows if the appointment is scheduled without their consent
+Patients shall not be charged for no shows after 3 consecutive no show charges. Rather, their future appointments will be removed. 
+Providers shall not charge a patient after three consecutive no shows; rather the provider shall cancel all future appointments. 
+No-show/late cancel fees will be automatically billed to the patient by Rula unless one of the following circumstances has occurred: 
+Rula error (i.e. patient requests cancellation 24+ hours ahead of appointment and Support team misses the ticket).  The provider will be reimbursed for the missed appointment. 
+Technology is not functional at the time of the appointment and the provider does not attempt to outreach the patient via other methods (i.e. patient cannot access appointment and provider does not offer telephone session). The provider will not be reimbursed for the missed appointment. 
+The patient is able to reschedule the appointment on the same day. No no-show fee will be charged and the provider will not be reimbursed in these situations.   
+Unexpected emergency, which is not an existing pattern for the patient, preventing the patient from attending the scheduled appointment. The provider will not be reimbursed for the missed appointment. 
+The provider makes a clinical exception and requests to waive the no-show fee.  The provider will not be reimbursed for the missed appointment when the fee is waived at their discretion.
+The provider schedules one of their existing patients for an appointment on the same day and the patient does not have 24 hours to cancel. The provider will not be reimbursed for the missed same day appointment. 
+C. Patient Outreach for Late Arrivals
+
+Provider must make a reasonable attempt to contact the patient 10 minutes after the appointment start time. 
+If a patient arrives to the appointment within 15 minutes of the scheduled time, the appropriate CPT code will be selected for the remaining time of the appointment. Code 90834 can be used for sessions 45 minutes in length.
+Therapists will be compensated at the corresponding rate of the CPT Code utilized for the late patient arrival. 
+A provider may deem an appointment a patient no-show if the patient is more than 15 minutes late. 
+D. Documenting a no-show/late cancellation
+
+Providers must mark the patient as a no-show from the scheduler.
+A missed appointment note must be completed in order to document the patient’s missed appointment and provider outreach attempts. A missed appointment note is a non-billable service but is required in the event of a dispute.
+E. Disputes
+
+Rula’s Support team manages all no-show fee disputes. 
+Providers must refer any disputes to Rula. All disputes about no-show fees are handled by Rula. 
+No-show fees will not be reimbursed to the patient if there is documentation in the record of provider outreach attempts, alternative modes of delivery (e.g., telephone) if applicable, and confirmation that the appointment information was sent to the patient. 
+No-show fees may be waived by Rula if there is no documentation of outreach attempts by the provider AND it is the first instance of a missed appointment for the patient OR if there is evidence that the appointment information was not sent to the patient. In these situations, the provider will not be compensated. 
+If the patient presents evidence contradicting the events recorded in the missed appointment note, Rula may contact the provider to provide evidence that they followed section C of this policy to outreach a late arrival to make a determination. 
