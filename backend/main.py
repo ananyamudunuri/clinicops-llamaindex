@@ -15,7 +15,8 @@ from anthropic import Anthropic as AnthropicClient
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.llms.anthropic import Anthropic
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+## from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.embeddings import MockEmbedding
 
 from llama_index.core.tools import QueryEngineTool, FunctionTool
 from llama_index.core.query_engine import RouterQueryEngine
