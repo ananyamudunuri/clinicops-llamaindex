@@ -126,6 +126,11 @@ button:hover {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 31px;
   letter-spacing: -0.6px;
+  color: #ffffff;
+}
+.documents-hero-copy .section-kicker {
+  background: rgba(255, 255, 255, 0.88);
+  color: #071126;
 }
 
 .documents-hero-copy p {
