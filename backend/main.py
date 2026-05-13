@@ -941,13 +941,101 @@ async def multimodal_rag_query(
         if not mime_type:
             mime_type = mimetypes.guess_type(file.filename)[0]
 
+        filename = file.filename or "uploaded_file"
+
+        # PDF support
+        if mime_type == "application/pdf" or filename.lower().endswith(".pdf"):
+            pdf_reader = PdfReader(io.BytesIO(file_bytes))
+            extracted_pages = []
+
+            for page_num, page in enumerate(pdf_reader.pages[:10], start=1):
+                page_text = page.extract_text() or ""
+
+                if page_text.strip():
+                    extracted_pages.append(
+                        f"\n--- Page {page_num} ---\n{page_text.strip()}"
+                    )
+
+            pdf_text = "\n".join(extracted_pages).strip()
+
+            if not pdf_text:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Could not extract readable text from this PDF. "
+                        "It may be scanned/image-based."
+                    ),
+                )
+
+            prompt = f"""
+You are a document analysis assistant.
+
+The user uploaded a PDF document.
+
+User question:
+{question}
+
+PDF text:
+{pdf_text}
+
+Answer clearly in clean plain English.
+
+Formatting rules:
+- Do not use markdown headings.
+- Do not use #, **, or ---.
+- Use short bullet points only if needed.
+- Keep the answer concise and easy to read.
+- If the PDF does not contain enough information, say what is missing.
+"""
+
+            response = anthropic_client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=1000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+            )
+
+            answer_parts = []
+
+            for block in response.content:
+                if hasattr(block, "text"):
+                    answer_parts.append(block.text)
+
+            answer = "\n".join(answer_parts)
+
+            clean_response = Settings.llm.complete(
+                clean_final_answer_prompt(question, answer)
+            )
+
+            return {
+                "exercise": "Multi Modal RAG",
+                "filename": filename,
+                "mime_type": "application/pdf",
+                "question": question,
+                "answer": str(clean_response),
+                "accessed_documents": [filename],
+                "source_documents": [filename],
+                "sources": [
+                    {
+                        "document": filename,
+                        "score": None,
+                        "excerpt": pdf_text[:900],
+                    }
+                ],
+            }
+
+        # Image support
         if not mime_type:
             mime_type = "image/png"
 
         if not mime_type.startswith("image/"):
             raise HTTPException(
                 status_code=400,
-                detail="Please upload an image file such as PNG, JPG, JPEG, or WEBP.",
+                detail="Please upload an image or PDF file.",
             )
 
         encoded_image = base64.b64encode(file_bytes).decode("utf-8")
@@ -1008,20 +1096,22 @@ Formatting rules:
 
         return {
             "exercise": "Multi Modal RAG",
-            "filename": file.filename,
+            "filename": filename,
             "mime_type": mime_type,
             "question": question,
             "answer": str(clean_response),
-            "accessed_documents": [file.filename],
-            "source_documents": [file.filename],
+            "accessed_documents": [filename],
+            "source_documents": [filename],
             "sources": [
                 {
-                    "document": file.filename,
+                    "document": filename,
                     "score": None,
                     "excerpt": "This answer was generated from the uploaded image file.",
                 }
             ],
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

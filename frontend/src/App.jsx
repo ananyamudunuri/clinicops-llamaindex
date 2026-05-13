@@ -56,7 +56,7 @@ function App() {
     basic: {
       title: "What Basic RAG is doing",
       steps: [
-        "Reads all clinic documents from the data folder.",
+        "Reads all uploaded documents from the data folder.",
         "Splits the documents into searchable chunks.",
         "Finds the most relevant chunks for your question.",
         "Sends those chunks to Claude to generate the final answer.",
@@ -66,7 +66,7 @@ function App() {
       title: "What Router RAG is doing",
       steps: [
         "Looks at your question first.",
-        "Decides whether the question belongs to appointment, billing, or insurance.",
+        "Decides whether the question belongs to appointment, billing, insurance, or general documents.",
         "Routes the question to the most relevant document index.",
         "Generates an answer from the selected policy area.",
       ],
@@ -74,8 +74,8 @@ function App() {
     subquestion: {
       title: "What SubQuestion RAG is doing",
       steps: [
-        "Sends the question to appointment, billing, and insurance documents separately.",
-        "Gets separate answers from each policy document.",
+        "Sends the question to different document areas separately.",
+        "Gets separate answers from each relevant document group.",
         "Compares the useful parts.",
         "Combines everything into one final response.",
       ],
@@ -101,9 +101,9 @@ function App() {
     multimodal: {
       title: "What Multimodal RAG is doing",
       steps: [
-        "Takes your uploaded image.",
-        "Sends the image and your question to Claude Vision.",
-        "Claude reads visible text, forms, cards, or diagrams.",
+        "Takes your uploaded image or PDF.",
+        "If it is an image, it sends it to Claude Vision.",
+        "If it is a PDF, the backend extracts readable text first.",
         "Returns a clean summary or extracted information.",
       ],
     },
@@ -120,7 +120,7 @@ function App() {
 
   const loadingSteps = {
     basic: [
-      "Reading all clinic documents from the data folder...",
+      "Reading all uploaded documents from the data folder...",
       "Splitting documents into searchable chunks...",
       "Finding the most relevant context for your question...",
       "Sending retrieved context to Claude...",
@@ -128,16 +128,16 @@ function App() {
     ],
     router: [
       "Reading your question...",
-      "Identifying whether it belongs to appointment, billing, or insurance...",
+      "Identifying the best document area...",
       "Routing the question to the best document index...",
-      "Retrieving relevant policy content...",
+      "Retrieving relevant content...",
       "Generating a focused answer...",
     ],
     subquestion: [
-      "Breaking the question into smaller policy checks...",
-      "Searching appointment policy...",
-      "Searching billing policy...",
-      "Searching insurance policy...",
+      "Breaking the question into smaller document checks...",
+      "Searching appointment-related documents...",
+      "Searching billing-related documents...",
+      "Searching insurance-related documents...",
       "Combining the useful answers into one response...",
     ],
     react: [
@@ -155,10 +155,10 @@ function App() {
       "Summarizing what each useful document says...",
     ],
     multimodal: [
-      "Reading the uploaded image...",
-      "Sending image and question to Claude Vision...",
-      "Extracting visible text and document fields...",
-      "Checking the image against your question...",
+      "Reading the uploaded file...",
+      "Checking whether it is an image or PDF...",
+      "Extracting visible content or readable PDF text...",
+      "Checking the file against your question...",
       "Generating a clean summary...",
     ],
   };
@@ -176,7 +176,11 @@ function App() {
     const interval = setInterval(() => {
       setLoadingStep((prevStep) => {
         const steps = loadingSteps[activeTab] || [];
-        if (prevStep < steps.length - 1) return prevStep + 1;
+
+        if (prevStep < steps.length - 1) {
+          return prevStep + 1;
+        }
+
         return prevStep;
       });
     }, 1200);
@@ -259,7 +263,9 @@ function App() {
       formData.append("file", file);
 
       const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       });
 
       const savedAs = response.data.saved_as || filename;
@@ -272,8 +278,12 @@ function App() {
       setDocMessage(`New document saved successfully as ${savedAs}.`);
     } catch (error) {
       console.error(error);
+
       const message =
-        error.response?.data?.detail || error.message || "Could not create document.";
+        error.response?.data?.detail ||
+        error.message ||
+        "Could not create document.";
+
       setDocMessage(`Create failed: ${message}`);
     } finally {
       setDocLoading(false);
@@ -294,7 +304,9 @@ function App() {
         content: documentContent,
       });
 
-      setDocMessage("Document saved successfully. New RAG answers will use this updated content.");
+      setDocMessage(
+        "Document saved successfully. New RAG answers will use this updated content."
+      );
     } catch (error) {
       console.error(error);
       setDocMessage("Could not save document.");
@@ -332,7 +344,9 @@ function App() {
       formData.append("file", uploadFile);
 
       const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       });
 
       const savedAs = response.data.saved_as || uploadFile.name;
@@ -342,8 +356,11 @@ function App() {
       await loadDocuments();
     } catch (error) {
       console.error(error);
+
       const message =
-        error.response?.data?.detail || error.message || "Could not upload document.";
+        error.response?.data?.detail ||
+        error.message ||
+        "Could not upload document.";
 
       setUploadMessage(`Upload failed: ${message}`);
     } finally {
@@ -352,7 +369,10 @@ function App() {
   };
 
   const deleteDocument = async (filename) => {
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${filename}?`);
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${filename}?`
+    );
+
     if (!confirmDelete) return;
 
     setDocLoading(true);
@@ -360,6 +380,7 @@ function App() {
 
     try {
       await axios.delete(`${API_BASE}/documents/${filename}`);
+
       setDocMessage(`${filename} deleted successfully.`);
 
       if (selectedDocument === filename) {
@@ -370,7 +391,9 @@ function App() {
       await loadDocuments();
     } catch (error) {
       console.error(error);
-      setDocMessage(error.response?.data?.detail || "Could not delete document.");
+      setDocMessage(
+        error.response?.data?.detail || "Could not delete document."
+      );
     } finally {
       setDocLoading(false);
     }
@@ -389,7 +412,8 @@ function App() {
   };
 
   const handleVoiceInput = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       alert("Voice input is not supported in this browser. Please use Chrome.");
@@ -440,7 +464,9 @@ function App() {
   };
 
   const getRagExplanation = () => {
-    if (!answer || answer.startsWith("Error:")) return null;
+    if (!answer || answer.startsWith("Error:")) {
+      return null;
+    }
 
     const accessed =
       accessedDocuments.length > 0
@@ -456,19 +482,19 @@ function App() {
 
     const explanations = {
       basic: [
-        "Basic RAG treated all available clinic text documents as one combined knowledge base.",
+        "Basic RAG treated all available text documents as one combined knowledge base.",
         `It searched across these documents: ${accessed}.`,
         `The final answer was generated from the most relevant retrieved chunks. Evidence chunks found: ${evidenceCount}.`,
         `The strongest supporting document or documents were: ${used}.`,
       ],
       router: [
-        "Router RAG first looked at the question and decided which policy area was most relevant.",
-        "It then routed the question to the best matching document index, such as appointment, billing, or insurance.",
+        "Router RAG first looked at the question and decided which document area was most relevant.",
+        "It then routed the question to the best matching document index.",
         `The document or documents used as evidence were: ${used}.`,
-        "The final answer was generated only after retrieving context from that selected policy area.",
+        "The final answer was generated only after retrieving context from that selected document area.",
       ],
       subquestion: [
-        "SubQuestion RAG checked appointment, billing, and insurance documents separately.",
+        "SubQuestion RAG checked different document areas separately.",
         "It produced smaller document-level answers first, then combined the useful parts into one final answer.",
         `The documents checked were: ${accessed}.`,
         `The evidence used in the final answer came from: ${used}.`,
@@ -487,9 +513,9 @@ function App() {
       ],
       multimodal: [
         "Multimodal RAG did not search the text document database.",
-        "It used the uploaded image directly and sent the image with your question to Claude Vision.",
+        "It used the uploaded file directly.",
         `The file analyzed was: ${used}.`,
-        "The answer was generated from visible text, fields, forms, or layout information in the uploaded image.",
+        "If the file was an image, Claude Vision analyzed it. If it was a PDF, the backend extracted readable text first.",
       ],
     };
 
@@ -516,7 +542,7 @@ function App() {
 
       if (activeTab === "multimodal") {
         if (!selectedFile) {
-          alert("Please upload an image file.");
+          alert("Please upload an image or PDF file.");
           setLoading(false);
           return;
         }
@@ -525,11 +551,19 @@ function App() {
         formData.append("question", question);
         formData.append("file", selectedFile);
 
-        response = await axios.post(`${API_BASE}${currentTab.route}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        response = await axios.post(
+          `${API_BASE}${currentTab.route}`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
       } else {
-        response = await axios.post(`${API_BASE}${currentTab.route}`, { question });
+        response = await axios.post(`${API_BASE}${currentTab.route}`, {
+          question,
+        });
       }
 
       const responseAnswer = response.data.answer || "";
@@ -573,10 +607,11 @@ function App() {
   return (
     <div className="app">
       <header className="hero">
-        <div className="hero-badge">LlamaIndex · Healthcare Workflow AI</div>
-        <h1>ClinicOps <em>AI</em> Assistant</h1>
+        <div className="hero-badge">LlamaIndex + Document Workflow AI</div>
+        <h1>ClinicOps AI Assistant</h1>
         <p>
-          Upload clinic policies, test RAG workflows, compare evidence, and see exactly how each answer was retrieved.
+          Upload policies, PDFs, notes, or reports. Test RAG workflows, compare
+          evidence, and see how each answer was retrieved.
         </p>
       </header>
 
@@ -586,13 +621,13 @@ function App() {
             <span className="section-kicker">Document workspace</span>
             <h2>Manage the knowledge base</h2>
             <p>
-              Upload, create, edit, and delete the clinic policy files that power the RAG assistant.
+              Upload, create, edit, and delete the files that power the RAG assistant.
             </p>
           </div>
 
           <div className="documents-hero-actions">
             <button className="sync-btn" onClick={loadDocuments} disabled={docLoading}>
-              {docLoading ? "Syncing..." : "↺ Sync"}
+              {docLoading ? "Syncing..." : "↻ Sync"}
             </button>
             <button className="new-primary-btn" onClick={startNewDocument}>
               + New Document
@@ -639,7 +674,9 @@ function App() {
                 </div>
               </div>
 
-              {documents.length === 0 && <p className="muted">No documents found.</p>}
+              {documents.length === 0 && (
+                <p className="muted">No documents found.</p>
+              )}
 
               <div className="doc-scroll">
                 {documents.map((doc) => (
@@ -679,7 +716,11 @@ function App() {
             <div className="editor-title-row">
               <div>
                 <span className="section-kicker">
-                  {isCreatingDocument ? "New document" : selectedDocument ? "Editor" : "Preview"}
+                  {isCreatingDocument
+                    ? "New document"
+                    : selectedDocument
+                    ? "Editor"
+                    : "Preview"}
                 </span>
                 <h3>
                   {isCreatingDocument
@@ -715,7 +756,7 @@ function App() {
               onChange={(e) => setDocumentContent(e.target.value)}
               placeholder={
                 isCreatingDocument
-                  ? "Start writing your new clinic policy document here..."
+                  ? "Start writing your new document here..."
                   : "Document content will appear here..."
               }
               disabled={!selectedDocument && !isCreatingDocument}
@@ -734,7 +775,9 @@ function App() {
                   : "Save Document"}
               </button>
 
-              {docMessage && <p className="doc-message inline-message">{docMessage}</p>}
+              {docMessage && (
+                <p className="doc-message inline-message">{docMessage}</p>
+              )}
             </div>
           </div>
         </div>
@@ -779,7 +822,7 @@ function App() {
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a clinic operations question..."
+              placeholder="Ask a question about your uploaded documents..."
             />
 
             <div className="action-row">
@@ -797,15 +840,17 @@ function App() {
 
             {activeTab === "multimodal" && (
               <div className="upload-box">
-                <label>Upload Image</label>
+                <label>Upload Image or PDF</label>
 
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,.pdf,application/pdf"
                   onChange={(e) => setSelectedFile(e.target.files[0])}
                 />
 
-                {selectedFile && <p className="file-name">Selected file: {selectedFile.name}</p>}
+                {selectedFile && (
+                  <p className="file-name">Selected file: {selectedFile.name}</p>
+                )}
               </div>
             )}
 
@@ -834,7 +879,11 @@ function App() {
                         }
                       >
                         <span>
-                          {index < loadingStep ? "✓" : index === loadingStep ? "•" : ""}
+                          {index < loadingStep
+                            ? "✓"
+                            : index === loadingStep
+                            ? "•"
+                            : ""}
                         </span>
                         <p>{step}</p>
                       </div>
@@ -917,7 +966,9 @@ function App() {
               <button onClick={clearChatHistory}>Clear</button>
             </div>
 
-            {chatHistory.length === 0 && <p className="muted">No questions asked yet.</p>}
+            {chatHistory.length === 0 && (
+              <p className="muted">No questions asked yet.</p>
+            )}
 
             <div className="history-list">
               {chatHistory.map((item) => (
