@@ -573,10 +573,10 @@ function App() {
   return (
     <div className="app">
       <header className="hero">
-        <div className="hero-badge">LlamaIndex + Healthcare Workflow AI</div>
-        <h1>ClinicOps AI Assistant</h1>
+        <div className="hero-badge">LlamaIndex · Healthcare Workflow AI</div>
+        <h1>ClinicOps <em>AI</em> Assistant</h1>
         <p>
-          Upload clinic policies, test RAG workflows, compare evidence, and see how each answer was retrieved.
+          Upload clinic policies, test RAG workflows, compare evidence, and see exactly how each answer was retrieved.
         </p>
       </header>
 
@@ -592,7 +592,7 @@ function App() {
 
           <div className="documents-hero-actions">
             <button className="sync-btn" onClick={loadDocuments} disabled={docLoading}>
-              {docLoading ? "Syncing..." : "Sync"}
+              {docLoading ? "Syncing..." : "↺ Sync"}
             </button>
             <button className="new-primary-btn" onClick={startNewDocument}>
               + New Document
