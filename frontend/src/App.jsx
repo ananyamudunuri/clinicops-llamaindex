@@ -176,11 +176,7 @@ function App() {
     const interval = setInterval(() => {
       setLoadingStep((prevStep) => {
         const steps = loadingSteps[activeTab] || [];
-
-        if (prevStep < steps.length - 1) {
-          return prevStep + 1;
-        }
-
+        if (prevStep < steps.length - 1) return prevStep + 1;
         return prevStep;
       });
     }, 1200);
@@ -192,6 +188,7 @@ function App() {
     try {
       const response = await axios.get(`${API_BASE}/documents`);
       setDocuments(response.data.documents || []);
+      setDocMessage("");
     } catch (error) {
       console.error(error);
       setDocMessage("Could not load documents. Check if backend is running.");
@@ -262,9 +259,7 @@ function App() {
       formData.append("file", file);
 
       const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       const savedAs = response.data.saved_as || filename;
@@ -277,12 +272,8 @@ function App() {
       setDocMessage(`New document saved successfully as ${savedAs}.`);
     } catch (error) {
       console.error(error);
-
       const message =
-        error.response?.data?.detail ||
-        error.message ||
-        "Could not create document.";
-
+        error.response?.data?.detail || error.message || "Could not create document.";
       setDocMessage(`Create failed: ${message}`);
     } finally {
       setDocLoading(false);
@@ -303,9 +294,7 @@ function App() {
         content: documentContent,
       });
 
-      setDocMessage(
-        "Document saved successfully. New RAG answers will use this updated content."
-      );
+      setDocMessage("Document saved successfully. New RAG answers will use this updated content.");
     } catch (error) {
       console.error(error);
       setDocMessage("Could not save document.");
@@ -343,9 +332,7 @@ function App() {
       formData.append("file", uploadFile);
 
       const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       const savedAs = response.data.saved_as || uploadFile.name;
@@ -355,11 +342,8 @@ function App() {
       await loadDocuments();
     } catch (error) {
       console.error(error);
-
       const message =
-        error.response?.data?.detail ||
-        error.message ||
-        "Could not upload document.";
+        error.response?.data?.detail || error.message || "Could not upload document.";
 
       setUploadMessage(`Upload failed: ${message}`);
     } finally {
@@ -368,10 +352,7 @@ function App() {
   };
 
   const deleteDocument = async (filename) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${filename}?`
-    );
-
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${filename}?`);
     if (!confirmDelete) return;
 
     setDocLoading(true);
@@ -379,7 +360,6 @@ function App() {
 
     try {
       await axios.delete(`${API_BASE}/documents/${filename}`);
-
       setDocMessage(`${filename} deleted successfully.`);
 
       if (selectedDocument === filename) {
@@ -390,9 +370,7 @@ function App() {
       await loadDocuments();
     } catch (error) {
       console.error(error);
-      setDocMessage(
-        error.response?.data?.detail || "Could not delete document."
-      );
+      setDocMessage(error.response?.data?.detail || "Could not delete document.");
     } finally {
       setDocLoading(false);
     }
@@ -411,8 +389,7 @@ function App() {
   };
 
   const handleVoiceInput = () => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       alert("Voice input is not supported in this browser. Please use Chrome.");
@@ -463,9 +440,7 @@ function App() {
   };
 
   const getRagExplanation = () => {
-    if (!answer || answer.startsWith("Error:")) {
-      return null;
-    }
+    if (!answer || answer.startsWith("Error:")) return null;
 
     const accessed =
       accessedDocuments.length > 0
@@ -550,19 +525,11 @@ function App() {
         formData.append("question", question);
         formData.append("file", selectedFile);
 
-        response = await axios.post(
-          `${API_BASE}${currentTab.route}`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-      } else {
-        response = await axios.post(`${API_BASE}${currentTab.route}`, {
-          question,
+        response = await axios.post(`${API_BASE}${currentTab.route}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
         });
+      } else {
+        response = await axios.post(`${API_BASE}${currentTab.route}`, { question });
       }
 
       const responseAnswer = response.data.answer || "";
@@ -605,100 +572,123 @@ function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <header className="hero">
+        <div className="hero-badge">LlamaIndex + Healthcare Workflow AI</div>
         <h1>ClinicOps AI Assistant</h1>
+        <p>
+          Upload clinic policies, test RAG workflows, compare evidence, and see how each answer was retrieved.
+        </p>
       </header>
 
       <section className="documents-card">
-        <div className="documents-header">
-          <div>
-            <h2>Clinic Documents</h2>
-            <p>View, create, upload, edit, and delete documents used by the RAG backend.</p>
+        <div className="documents-hero">
+          <div className="documents-hero-copy">
+            <span className="section-kicker">Document workspace</span>
+            <h2>Manage the knowledge base</h2>
+            <p>
+              Upload, create, edit, and delete the clinic policy files that power the RAG assistant.
+            </p>
           </div>
 
-          <button className="refresh-btn" onClick={loadDocuments}>
-            Refresh Documents
-          </button>
-        </div>
-
-        <div className="upload-document-box">
-          <div>
-            <h3>Upload New Document</h3>
-            <p>Add a .txt document or upload a PDF. PDFs will be converted into editable text.</p>
-          </div>
-
-          <div className="upload-document-actions">
-            <input
-              type="file"
-              accept=".txt,.pdf"
-              onChange={(e) => setUploadFile(e.target.files[0])}
-            />
-
-            <button
-              className="upload-doc-btn"
-              onClick={uploadNewDocument}
-              disabled={docLoading}
-            >
-              {docLoading ? "Uploading..." : "Upload Document"}
+          <div className="documents-hero-actions">
+            <button className="sync-btn" onClick={loadDocuments} disabled={docLoading}>
+              {docLoading ? "Syncing..." : "Sync"}
+            </button>
+            <button className="new-primary-btn" onClick={startNewDocument}>
+              + New Document
             </button>
           </div>
-
-          {uploadMessage && <p className="doc-message">{uploadMessage}</p>}
         </div>
 
-        <div className="documents-layout">
-          <div className="documents-list">
-            <div className="documents-list-header">
-              <h3>Available Documents</h3>
+        <div className="document-console">
+          <aside className="document-sidebar">
+            <div className="upload-panel">
+              <div className="upload-panel-top">
+                <div>
+                  <h3>Upload file</h3>
+                  <p>Supports .txt and text-based PDFs.</p>
+                </div>
+              </div>
 
-              <button className="new-doc-btn" onClick={startNewDocument}>
-                + New
+              <div className="file-picker">
+                <input
+                  type="file"
+                  accept=".txt,.pdf"
+                  onChange={(e) => setUploadFile(e.target.files[0])}
+                />
+              </div>
+
+              {uploadFile && <p className="selected-upload">{uploadFile.name}</p>}
+
+              <button
+                className="upload-doc-btn"
+                onClick={uploadNewDocument}
+                disabled={docLoading}
+              >
+                {docLoading ? "Uploading..." : "Upload"}
               </button>
+
+              {uploadMessage && <p className="doc-message">{uploadMessage}</p>}
             </div>
 
-            {documents.length === 0 && (
-              <p className="muted">No documents found.</p>
-            )}
-
-            {documents.map((doc) => (
-              <div
-                key={doc.filename}
-                className={
-                  selectedDocument === doc.filename
-                    ? "doc-row active-doc-row"
-                    : "doc-row"
-                }
-              >
-                <button
-                  className="doc-item"
-                  onClick={() => loadDocumentContent(doc.filename)}
-                >
-                  {doc.filename}
-                </button>
-
-                <button
-                  className="delete-doc-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteDocument(doc.filename);
-                  }}
-                  title="Delete document"
-                >
-                  ×
-                </button>
+            <div className="documents-list">
+              <div className="documents-list-header">
+                <div>
+                  <h3>Library</h3>
+                  <p>{documents.length} documents</p>
+                </div>
               </div>
-            ))}
-          </div>
+
+              {documents.length === 0 && <p className="muted">No documents found.</p>}
+
+              <div className="doc-scroll">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.filename}
+                    className={
+                      selectedDocument === doc.filename
+                        ? "doc-row active-doc-row"
+                        : "doc-row"
+                    }
+                  >
+                    <button
+                      className="doc-item"
+                      onClick={() => loadDocumentContent(doc.filename)}
+                    >
+                      <span className="doc-icon">📄</span>
+                      <span>{doc.filename}</span>
+                    </button>
+
+                    <button
+                      className="delete-doc-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteDocument(doc.filename);
+                      }}
+                      title="Delete document"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
 
           <div className="document-editor">
             <div className="editor-title-row">
-              <h3>
-                {isCreatingDocument
-                  ? "Create New Document"
-                  : selectedDocument
-                  ? `Editing: ${selectedDocument}`
-                  : "Select a document to view or edit"}
-              </h3>
+              <div>
+                <span className="section-kicker">
+                  {isCreatingDocument ? "New document" : selectedDocument ? "Editor" : "Preview"}
+                </span>
+                <h3>
+                  {isCreatingDocument
+                    ? "Create a new policy file"
+                    : selectedDocument
+                    ? selectedDocument
+                    : "Select a document to view or edit"}
+                </h3>
+              </div>
 
               {isCreatingDocument && (
                 <button className="cancel-doc-btn" onClick={cancelNewDocument}>
@@ -743,206 +733,208 @@ function App() {
                   ? "Save New Document"
                   : "Save Document"}
               </button>
-            </div>
 
-            {docMessage && <p className="doc-message">{docMessage}</p>}
+              {docMessage && <p className="doc-message inline-message">{docMessage}</p>}
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="tabs">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={activeTab === tab.id ? "tab active" : "tab"}
-            onClick={() => handleTabChange(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="workspace-grid">
-        <main className="card">
-          <div className="section-title">
-            <h2>{currentTab.label}</h2>
-            <p>Route: {currentTab.route}</p>
-          </div>
-
-          <div className="explain-box">
-            <h3>{exerciseInfo[activeTab].title}</h3>
-
-            <div className="pipeline-steps">
-              {exerciseInfo[activeTab].steps.map((step, index) => (
-                <div key={index} className="pipeline-step">
-                  <span>{index + 1}</span>
-                  <p>{step}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <label>Question</label>
-
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask a clinic operations question..."
-          />
-
-          <div className="action-row">
-            <button className="voice-btn" onClick={handleVoiceInput}>
-              {listening ? "Listening..." : "🎤 Speak Question"}
-            </button>
-
+      <section className="rag-shell">
+        <div className="tabs">
+          {tabs.map((tab) => (
             <button
-              className="sample-btn"
-              onClick={() => setQuestion(sampleQuestions[activeTab])}
+              key={tab.id}
+              className={activeTab === tab.id ? "tab active" : "tab"}
+              onClick={() => handleTabChange(tab.id)}
             >
-              Use Sample Question
+              {tab.label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          {activeTab === "multimodal" && (
-            <div className="upload-box">
-              <label>Upload Image</label>
-
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                onChange={(e) => setSelectedFile(e.target.files[0])}
-              />
-
-              {selectedFile && (
-                <p className="file-name">Selected file: {selectedFile.name}</p>
-              )}
-            </div>
-          )}
-
-          <button className="submit-btn" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Thinking..." : "Ask AI"}
-          </button>
-
-          <div className="answer-box">
-            <h3>Answer</h3>
-
-            {loading && (
-              <div className="thinking-box">
-                <div className="thinking-header">
-                  <div className="spinner"></div>
-                  <p>{loadingMessage[activeTab]}</p>
-                </div>
-
-                <div className="thinking-steps">
-                  {(loadingSteps[activeTab] || []).map((step, index) => (
-                    <div
-                      key={index}
-                      className={
-                        index <= loadingStep
-                          ? "thinking-step active-thinking-step"
-                          : "thinking-step"
-                      }
-                    >
-                      <span>
-                        {index < loadingStep ? "✓" : index === loadingStep ? "•" : ""}
-                      </span>
-                      <p>{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="answer-text">
-              {answer || (!loading ? "Answer will appear here..." : "")}
+        <div className="workspace-grid">
+          <main className="card">
+            <div className="section-title">
+              <span className="section-kicker">RAG testing workspace</span>
+              <h2>{currentTab.label}</h2>
+              <p>Route: {currentTab.route}</p>
             </div>
 
-            {ragExplanation && (
-              <div className="rag-explanation-box">
-                <h3>How RAG Got This Answer</h3>
+            <div className="explain-box">
+              <h3>{exerciseInfo[activeTab].title}</h3>
 
-                <div className="rag-explanation-steps">
-                  {ragExplanation.map((step, index) => (
-                    <div key={index} className="rag-explanation-step">
-                      <span>{index + 1}</span>
-                      <p>{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(accessedDocuments.length > 0 || sourceDocuments.length > 0) && (
-              <div className="source-summary-box">
-                {accessedDocuments.length > 0 && (
-                  <div>
-                    <h4>Documents Accessed</h4>
-                    <div className="source-tags">
-                      {accessedDocuments.map((doc) => (
-                        <span key={doc}>{doc}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {sourceDocuments.length > 0 && (
-                  <div>
-                    <h4>Documents Used for Evidence</h4>
-                    <div className="source-tags used-tags">
-                      {sourceDocuments.map((doc) => (
-                        <span key={doc}>{doc}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {sources.length > 0 && (
-              <div className="sources-box">
-                <h3>Retrieved Evidence</h3>
-
-                {sources.map((source, index) => (
-                  <div key={index} className="source-card">
-                    <div className="source-card-header">
-                      <strong>{source.document}</strong>
-                      {source.score !== null && source.score !== undefined && (
-                        <span>Score: {source.score}</span>
-                      )}
-                    </div>
-                    <p>{source.excerpt}</p>
+              <div className="pipeline-steps">
+                {exerciseInfo[activeTab].steps.map((step, index) => (
+                  <div key={index} className="pipeline-step">
+                    <span>{index + 1}</span>
+                    <p>{step}</p>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </main>
+            </div>
 
-        <aside className="history-card">
-          <div className="history-header">
-            <h2>Chat History</h2>
-            <button onClick={clearChatHistory}>Clear</button>
-          </div>
+            <label>Question</label>
 
-          {chatHistory.length === 0 && (
-            <p className="muted">No questions asked yet.</p>
-          )}
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask a clinic operations question..."
+            />
 
-          <div className="history-list">
-            {chatHistory.map((item) => (
-              <button
-                key={item.id}
-                className="history-item"
-                onClick={() => restoreHistoryItem(item)}
-              >
-                <span>{item.tabLabel}</span>
-                <p>{item.question}</p>
-                <small>{item.createdAt}</small>
+            <div className="action-row">
+              <button className="voice-btn" onClick={handleVoiceInput}>
+                {listening ? "Listening..." : "🎤 Speak Question"}
               </button>
-            ))}
-          </div>
-        </aside>
-      </div>
+
+              <button
+                className="sample-btn"
+                onClick={() => setQuestion(sampleQuestions[activeTab])}
+              >
+                Use Sample Question
+              </button>
+            </div>
+
+            {activeTab === "multimodal" && (
+              <div className="upload-box">
+                <label>Upload Image</label>
+
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => setSelectedFile(e.target.files[0])}
+                />
+
+                {selectedFile && <p className="file-name">Selected file: {selectedFile.name}</p>}
+              </div>
+            )}
+
+            <button className="submit-btn" onClick={handleSubmit} disabled={loading}>
+              {loading ? "Thinking..." : "Ask AI"}
+            </button>
+
+            <div className="answer-box">
+              <h3>Answer</h3>
+
+              {loading && (
+                <div className="thinking-box">
+                  <div className="thinking-header">
+                    <div className="spinner"></div>
+                    <p>{loadingMessage[activeTab]}</p>
+                  </div>
+
+                  <div className="thinking-steps">
+                    {(loadingSteps[activeTab] || []).map((step, index) => (
+                      <div
+                        key={index}
+                        className={
+                          index <= loadingStep
+                            ? "thinking-step active-thinking-step"
+                            : "thinking-step"
+                        }
+                      >
+                        <span>
+                          {index < loadingStep ? "✓" : index === loadingStep ? "•" : ""}
+                        </span>
+                        <p>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="answer-text">
+                {answer || (!loading ? "Answer will appear here..." : "")}
+              </div>
+
+              {ragExplanation && (
+                <div className="rag-explanation-box">
+                  <h3>How RAG Got This Answer</h3>
+
+                  <div className="rag-explanation-steps">
+                    {ragExplanation.map((step, index) => (
+                      <div key={index} className="rag-explanation-step">
+                        <span>{index + 1}</span>
+                        <p>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(accessedDocuments.length > 0 || sourceDocuments.length > 0) && (
+                <div className="source-summary-box">
+                  {accessedDocuments.length > 0 && (
+                    <div>
+                      <h4>Documents Accessed</h4>
+                      <div className="source-tags">
+                        {accessedDocuments.map((doc) => (
+                          <span key={doc}>{doc}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceDocuments.length > 0 && (
+                    <div>
+                      <h4>Documents Used for Evidence</h4>
+                      <div className="source-tags used-tags">
+                        {sourceDocuments.map((doc) => (
+                          <span key={doc}>{doc}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sources.length > 0 && (
+                <div className="sources-box">
+                  <h3>Retrieved Evidence</h3>
+
+                  {sources.map((source, index) => (
+                    <div key={index} className="source-card">
+                      <div className="source-card-header">
+                        <strong>{source.document}</strong>
+                        {source.score !== null && source.score !== undefined && (
+                          <span>Score: {source.score}</span>
+                        )}
+                      </div>
+                      <p>{source.excerpt}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </main>
+
+          <aside className="history-card">
+            <div className="history-header">
+              <div>
+                <span className="section-kicker">Session</span>
+                <h2>Chat History</h2>
+              </div>
+              <button onClick={clearChatHistory}>Clear</button>
+            </div>
+
+            {chatHistory.length === 0 && <p className="muted">No questions asked yet.</p>}
+
+            <div className="history-list">
+              {chatHistory.map((item) => (
+                <button
+                  key={item.id}
+                  className="history-item"
+                  onClick={() => restoreHistoryItem(item)}
+                >
+                  <span>{item.tabLabel}</span>
+                  <p>{item.question}</p>
+                  <small>{item.createdAt}</small>
+                </button>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </section>
     </div>
   );
 }
