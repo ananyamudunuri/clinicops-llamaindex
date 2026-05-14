@@ -14,153 +14,79 @@ function App() {
   const [accessedDocuments, setAccessedDocuments] = useState([]);
   const [sourceDocuments, setSourceDocuments] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
-
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [listening, setListening] = useState(false);
-
   const [documents, setDocuments] = useState([]);
   const [selectedDocument, setSelectedDocument] = useState("");
   const [documentContent, setDocumentContent] = useState("");
   const [docMessage, setDocMessage] = useState("");
   const [docLoading, setDocLoading] = useState(false);
-
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadMessage, setUploadMessage] = useState("");
-
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
   const [newDocumentName, setNewDocumentName] = useState("new_policy.txt");
+  const [leftView, setLeftView] = useState("library");
 
   const tabs = [
     { id: "basic", label: "Basic RAG", route: "/basic-rag/query" },
     { id: "router", label: "Router RAG", route: "/router-rag/query" },
-    { id: "subquestion", label: "SubQuestion RAG", route: "/subquestion-rag/query" },
+    { id: "subquestion", label: "Sub-Question", route: "/subquestion-rag/query" },
     { id: "react", label: "ReAct Agent", route: "/react-agent/query" },
-    { id: "multidoc", label: "Multi Document Agent", route: "/multi-doc-agent/query" },
-    { id: "multimodal", label: "Multimodal RAG", route: "/multimodal-rag/query" },
+    { id: "multidoc", label: "Multi-Doc Agent", route: "/multi-doc-agent/query" },
+    { id: "multimodal", label: "Multimodal", route: "/multimodal-rag/query" },
   ];
 
   const sampleQuestions = {
     basic: "What happens if a patient cancels less than 24 hours before the appointment?",
     router: "Does the clinic accept Medicaid?",
     subquestion: "Compare appointment cancellation and billing fee policy.",
-    react:
-      "If the consultation fee is 120 dollars and insurance covers 70 percent, how much does the patient pay?",
-    multidoc:
-      "Which documents are irrelevant to the clinic policy knowledge base, and what do they contain?",
+    react: "If the consultation fee is 120 dollars and insurance covers 70 percent, how much does the patient pay?",
+    multidoc: "Which documents are irrelevant to the clinic policy knowledge base, and what do they contain?",
     multimodal: "What information is visible in this document?",
   };
 
   const exerciseInfo = {
     basic: {
-      title: "What Basic RAG is doing",
-      steps: [
-        "Reads all uploaded documents from the data folder.",
-        "Splits the documents into searchable chunks.",
-        "Finds the most relevant chunks for your question.",
-        "Sends those chunks to Claude to generate the final answer.",
-      ],
+      title: "Basic RAG",
+      desc: "Searches all uploaded documents as one combined knowledge base and retrieves the most relevant chunks.",
+      icon: "▰",
     },
     router: {
-      title: "What Router RAG is doing",
-      steps: [
-        "Looks at your question first.",
-        "Decides whether the question belongs to appointment, billing, insurance, or general documents.",
-        "Routes the question to the most relevant document index.",
-        "Generates an answer from the selected policy area.",
-      ],
+      title: "Router RAG",
+      desc: "Classifies your question and routes it to the single most relevant document index.",
+      icon: "⌁",
     },
     subquestion: {
-      title: "What SubQuestion RAG is doing",
-      steps: [
-        "Sends the question to different document areas separately.",
-        "Gets separate answers from each relevant document group.",
-        "Compares the useful parts.",
-        "Combines everything into one final response.",
-      ],
+      title: "Sub-Question RAG",
+      desc: "Decomposes your question, checks each document separately, then synthesises a final answer.",
+      icon: "◇",
     },
     react: {
-      title: "What ReAct Agent is doing",
-      steps: [
-        "Reads the question and decides which tool to use.",
-        "Can use document search, calculator, LLM knowledge or policy summary tool.",
-        "Runs the selected tool.",
-        "Returns the final answer based on the tool result.",
-      ],
+      title: "ReAct Agent",
+      desc: "Picks from document search, calculator, or general LLM knowledge based on what the question needs.",
+      icon: "✦",
     },
     multidoc: {
-      title: "What Multi Document Agent is doing",
-      steps: [
-        "Turns every uploaded .txt document into a separate searchable tool.",
-        "The agent decides which document tools are relevant.",
-        "It can check more than one document if needed.",
-        "Returns which documents contain the answer and what they say.",
-      ],
+      title: "Multi-Doc Agent",
+      desc: "Turns every uploaded document into its own tool and decides which ones to query.",
+      icon: "▣",
     },
     multimodal: {
-      title: "What Multimodal RAG is doing",
-      steps: [
-        "Takes your uploaded image or PDF.",
-        "If it is an image, it sends it to Claude Vision.",
-        "If it is a PDF, the backend extracts readable text first.",
-        "Returns a clean summary or extracted information.",
-      ],
+      title: "Multimodal RAG",
+      desc: "Accepts an image or PDF and answers using Claude Vision or extracted PDF text.",
+      icon: "◉",
     },
-  };
-
-  const loadingMessage = {
-    basic: "Running Basic RAG workflow...",
-    router: "Running Router RAG workflow...",
-    subquestion: "Running SubQuestion RAG workflow...",
-    react: "Running ReAct Agent workflow...",
-    multidoc: "Running Multi Document Agent workflow...",
-    multimodal: "Running Multimodal RAG workflow...",
   };
 
   const loadingSteps = {
-    basic: [
-      "Reading all uploaded documents from the data folder...",
-      "Splitting documents into searchable chunks...",
-      "Finding the most relevant context for your question...",
-      "Sending retrieved context to Claude...",
-      "Generating the final answer...",
-    ],
-    router: [
-      "Reading your question...",
-      "Identifying the best document area...",
-      "Routing the question to the best document index...",
-      "Retrieving relevant content...",
-      "Generating a focused answer...",
-    ],
-    subquestion: [
-      "Breaking the question into smaller document checks...",
-      "Searching appointment-related documents...",
-      "Searching billing-related documents...",
-      "Searching insurance-related documents...",
-      "Combining the useful answers into one response...",
-    ],
-    react: [
-      "Agent is reading your question...",
-      "Agent is deciding which tool to use...",
-      "Running document search, calculator, or summary tool...",
-      "Reviewing the tool output...",
-      "Generating the final response...",
-    ],
-    multidoc: [
-      "Scanning all uploaded text documents...",
-      "Creating a separate tool for each document...",
-      "Choosing which documents are relevant...",
-      "Searching selected document tools...",
-      "Summarizing what each useful document says...",
-    ],
-    multimodal: [
-      "Reading the uploaded file...",
-      "Checking whether it is an image or PDF...",
-      "Extracting visible content or readable PDF text...",
-      "Checking the file against your question...",
-      "Generating a clean summary...",
-    ],
+    basic: ["Loading documents", "Splitting into chunks", "Finding relevant chunks", "Sending to Claude", "Generating answer"],
+    router: ["Reading question", "Selecting best index", "Routing query", "Retrieving context", "Generating answer"],
+    subquestion: ["Decomposing question", "Checking each document", "Collecting sub-answers", "Synthesising", "Finalising answer"],
+    react: ["Reading question", "Choosing a tool", "Running tool", "Reviewing output", "Generating answer"],
+    multidoc: ["Scanning documents", "Building tool per doc", "Selecting relevant tools", "Querying", "Summarising"],
+    multimodal: ["Reading file", "Detecting type", "Extracting content", "Matching question", "Generating answer"],
   };
 
   useEffect(() => {
@@ -172,30 +98,22 @@ function App() {
       setLoadingStep(0);
       return;
     }
-
-    const interval = setInterval(() => {
-      setLoadingStep((prevStep) => {
-        const steps = loadingSteps[activeTab] || [];
-
-        if (prevStep < steps.length - 1) {
-          return prevStep + 1;
-        }
-
-        return prevStep;
+    const iv = setInterval(() => {
+      setLoadingStep((p) => {
+        const max = (loadingSteps[activeTab] || []).length - 1;
+        return p < max ? p + 1 : p;
       });
     }, 1200);
-
-    return () => clearInterval(interval);
+    return () => clearInterval(iv);
   }, [loading, activeTab]);
 
   const loadDocuments = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/documents`);
-      setDocuments(response.data.documents || []);
+      const res = await axios.get(`${API_BASE}/documents`);
+      setDocuments(res.data.documents || []);
       setDocMessage("");
-    } catch (error) {
-      console.error(error);
-      setDocMessage("Could not load documents. Check if backend is running.");
+    } catch {
+      setDocMessage("Could not load documents. Is the backend running?");
     }
   };
 
@@ -204,7 +122,8 @@ function App() {
     setSelectedDocument("");
     setNewDocumentName("new_policy.txt");
     setDocumentContent("");
-    setDocMessage("Write your new document content and click Save Document.");
+    setDocMessage("Write your content and click Save.");
+    setLeftView("editor");
   };
 
   const cancelNewDocument = () => {
@@ -213,22 +132,21 @@ function App() {
     setNewDocumentName("new_policy.txt");
     setDocumentContent("");
     setDocMessage("");
+    setLeftView("library");
   };
 
   const loadDocumentContent = async (filename) => {
     if (!filename) return;
-
     setDocLoading(true);
     setDocMessage("");
     setIsCreatingDocument(false);
-
     try {
-      const response = await axios.get(`${API_BASE}/documents/${filename}`);
+      const res = await axios.get(`${API_BASE}/documents/${filename}`);
       setSelectedDocument(filename);
-      setDocumentContent(response.data.content);
-    } catch (error) {
-      console.error(error);
-      setDocMessage("Could not load document content.");
+      setDocumentContent(res.data.content);
+      setLeftView("editor");
+    } catch {
+      setDocMessage("Could not load document.");
     } finally {
       setDocLoading(false);
     }
@@ -236,55 +154,34 @@ function App() {
 
   const saveNewDocument = async () => {
     let filename = newDocumentName.trim();
-
     if (!filename) {
-      alert("Please enter a file name.");
+      alert("Enter a file name.");
       return;
     }
-
     if (!filename.toLowerCase().endsWith(".txt")) {
-      filename = `${filename}.txt`;
+      filename += ".txt";
       setNewDocumentName(filename);
     }
-
     if (!documentContent.trim()) {
-      alert("Please enter document content before saving.");
+      alert("Add some content first.");
       return;
     }
-
     setDocLoading(true);
-    setDocMessage("");
-
     try {
       const blob = new Blob([documentContent], { type: "text/plain" });
       const file = new File([blob], filename, { type: "text/plain" });
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await axios.post(`${API_BASE}/documents/upload`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-
-      const savedAs = response.data.saved_as || filename;
-
+      const savedAs = res.data.saved_as || filename;
       await loadDocuments();
-
       setSelectedDocument(savedAs);
-      setNewDocumentName(savedAs);
       setIsCreatingDocument(false);
-      setDocMessage(`New document saved successfully as ${savedAs}.`);
-    } catch (error) {
-      console.error(error);
-
-      const message =
-        error.response?.data?.detail ||
-        error.message ||
-        "Could not create document.";
-
-      setDocMessage(`Create failed: ${message}`);
+      setDocMessage(`Saved as ${savedAs}`);
+    } catch (e) {
+      setDocMessage(`Save failed: ${e.response?.data?.detail || e.message}`);
     } finally {
       setDocLoading(false);
     }
@@ -292,116 +189,72 @@ function App() {
 
   const saveExistingDocument = async () => {
     if (!selectedDocument) {
-      alert("Please select a document first.");
+      alert("Select a document first.");
       return;
     }
-
     setDocLoading(true);
-    setDocMessage("");
-
     try {
-      await axios.put(`${API_BASE}/documents/${selectedDocument}`, {
-        content: documentContent,
-      });
-
-      setDocMessage(
-        "Document saved successfully. New RAG answers will use this updated content."
-      );
-    } catch (error) {
-      console.error(error);
-      setDocMessage("Could not save document.");
+      await axios.put(`${API_BASE}/documents/${selectedDocument}`, { content: documentContent });
+      setDocMessage("Saved — RAG will use the updated content.");
+    } catch {
+      setDocMessage("Could not save.");
     } finally {
       setDocLoading(false);
     }
   };
 
-  const saveDocumentContent = async () => {
-    if (isCreatingDocument) {
-      await saveNewDocument();
-    } else {
-      await saveExistingDocument();
-    }
-  };
+  const saveDocumentContent = () => (isCreatingDocument ? saveNewDocument() : saveExistingDocument());
 
   const uploadNewDocument = async () => {
     if (!uploadFile) {
-      alert("Please choose a .txt or .pdf file to upload.");
+      alert("Choose a file.");
       return;
     }
-
-    const lowerName = uploadFile.name.toLowerCase();
-
-    if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".pdf")) {
-      alert("Only .txt and .pdf files are supported.");
+    const lower = uploadFile.name.toLowerCase();
+    if (!lower.endsWith(".txt") && !lower.endsWith(".pdf")) {
+      alert("Only .txt and .pdf supported.");
       return;
     }
-
     setDocLoading(true);
     setUploadMessage("");
-
     try {
-      const formData = new FormData();
-      formData.append("file", uploadFile);
-
-      const response = await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      const res = await axios.post(`${API_BASE}/documents/upload`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-
-      const savedAs = response.data.saved_as || uploadFile.name;
-
-      setUploadMessage(`Document uploaded successfully as ${savedAs}.`);
+      setUploadMessage(`Uploaded as ${res.data.saved_as || uploadFile.name}`);
       setUploadFile(null);
       await loadDocuments();
-    } catch (error) {
-      console.error(error);
-
-      const message =
-        error.response?.data?.detail ||
-        error.message ||
-        "Could not upload document.";
-
-      setUploadMessage(`Upload failed: ${message}`);
+    } catch (e) {
+      setUploadMessage(`Upload failed: ${e.response?.data?.detail || e.message}`);
     } finally {
       setDocLoading(false);
     }
   };
 
   const deleteDocument = async (filename) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${filename}?`
-    );
-
-    if (!confirmDelete) return;
-
+    if (!window.confirm(`Delete ${filename}?`)) return;
     setDocLoading(true);
-    setDocMessage("");
-
     try {
       await axios.delete(`${API_BASE}/documents/${filename}`);
-
-      setDocMessage(`${filename} deleted successfully.`);
-
       if (selectedDocument === filename) {
         setSelectedDocument("");
         setDocumentContent("");
+        setLeftView("library");
       }
-
       await loadDocuments();
-    } catch (error) {
-      console.error(error);
-      setDocMessage(
-        error.response?.data?.detail || "Could not delete document."
-      );
+      setDocMessage(`${filename} deleted.`);
+    } catch (e) {
+      setDocMessage(e.response?.data?.detail || "Could not delete.");
     } finally {
       setDocLoading(false);
     }
   };
 
-  const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-    setQuestion(sampleQuestions[tabId]);
+  const handleTabChange = (id) => {
+    setActiveTab(id);
+    setQuestion(sampleQuestions[id]);
     setAnswer("");
     setSources([]);
     setAccessedDocuments([]);
@@ -412,41 +265,26 @@ function App() {
   };
 
   const handleVoiceInput = () => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert("Voice input is not supported in this browser. Please use Chrome.");
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert("Voice input requires Chrome.");
       return;
     }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
+    const r = new SR();
+    r.lang = "en-US";
+    r.interimResults = false;
+    r.maxAlternatives = 1;
     setListening(true);
-    recognition.start();
-
-    recognition.onresult = (event) => {
-      const spokenText = event.results[0][0].transcript;
-      setQuestion(spokenText);
+    r.start();
+    r.onresult = (e) => {
+      setQuestion(e.results[0][0].transcript);
       setListening(false);
     };
-
-    recognition.onerror = (event) => {
-      setListening(false);
-      alert("Voice input error: " + event.error);
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-    };
+    r.onerror = () => setListening(false);
+    r.onend = () => setListening(false);
   };
 
-  const saveToChatHistory = (entry) => {
-    setChatHistory((prevHistory) => [entry, ...prevHistory].slice(0, 10));
-  };
+  const saveToChatHistory = (entry) => setChatHistory((prev) => [entry, ...prev].slice(0, 10));
 
   const restoreHistoryItem = (item) => {
     setActiveTab(item.tabId);
@@ -459,533 +297,373 @@ function App() {
     setLoadingStep(0);
   };
 
-  const clearChatHistory = () => {
-    setChatHistory([]);
-  };
-
   const getRagExplanation = () => {
-    if (!answer || answer.startsWith("Error:")) {
-      return null;
-    }
-
-    const accessed =
-      accessedDocuments.length > 0
-        ? accessedDocuments.join(", ")
-        : "No accessed document metadata was returned.";
-
-    const used =
-      sourceDocuments.length > 0
-        ? sourceDocuments.join(", ")
-        : "No specific evidence document was returned.";
-
-    const evidenceCount = sources.length;
-
-    const explanations = {
-      basic: [
-        "Basic RAG treated all available text documents as one combined knowledge base.",
-        `It searched across these documents: ${accessed}.`,
-        `The final answer was generated from the most relevant retrieved chunks. Evidence chunks found: ${evidenceCount}.`,
-        `The strongest supporting document or documents were: ${used}.`,
-      ],
-      router: [
-        "Router RAG first looked at the question and decided which document area was most relevant.",
-        "It then routed the question to the best matching document index.",
-        `The document or documents used as evidence were: ${used}.`,
-        "The final answer was generated only after retrieving context from that selected document area.",
-      ],
-      subquestion: [
-        "SubQuestion RAG checked different document areas separately.",
-        "It produced smaller document-level answers first, then combined the useful parts into one final answer.",
-        `The documents checked were: ${accessed}.`,
-        `The evidence used in the final answer came from: ${used}.`,
-      ],
-      react: [
-        "The ReAct Agent read the question and selected a tool to help answer it.",
-        "Depending on the question, it could use document search, calculator logic, or a policy summary tool.",
-        `For document grounding, it searched these available documents: ${accessed}.`,
-        `The retrieved evidence came from: ${used}.`,
-      ],
-      multidoc: [
-        "The Multi Document Agent treated each uploaded text document as its own searchable tool.",
-        "It decided which document tools were relevant to the question.",
-        `It had access to these document tools: ${accessed}.`,
-        `The most useful evidence came from: ${used}.`,
-      ],
-      multimodal: [
-        "Multimodal RAG did not search the text document database.",
-        "It used the uploaded file directly.",
-        `The file analyzed was: ${used}.`,
-        "If the file was an image, Claude Vision analyzed it. If it was a PDF, the backend extracted readable text first.",
-      ],
-    };
-
-    return explanations[activeTab] || [];
+    if (!answer || answer.startsWith("Error:")) return null;
+    const accessed = accessedDocuments.length > 0 ? accessedDocuments.join(", ") : "none";
+    const used = sourceDocuments.length > 0 ? sourceDocuments.join(", ") : "none";
+    const n = sources.length;
+    return (
+      {
+        basic: [`Searched all documents: ${accessed}.`, `Found ${n} evidence chunk(s).`, `Strongest evidence from: ${used}.`],
+        router: ["Routed to the most relevant index.", `Evidence from: ${used}.`],
+        subquestion: [`Checked documents: ${accessed}.`, `Evidence from: ${used}.`],
+        react: [`Accessed: ${accessed}.`, `Evidence from: ${used}.`],
+        multidoc: [`Document tools accessed: ${accessed}.`, `Evidence from: ${used}.`],
+        multimodal: [`File analysed: ${used}.`, "Vision or PDF extraction was used."],
+      }[activeTab] || []
+    );
   };
 
   const handleSubmit = async () => {
     if (!question.trim()) {
-      alert("Please enter a question.");
+      alert("Enter a question.");
       return;
     }
-
     setLoading(true);
     setLoadingStep(0);
     setAnswer("");
     setSources([]);
     setAccessedDocuments([]);
     setSourceDocuments([]);
-
     try {
-      const currentTab = tabs.find((tab) => tab.id === activeTab);
-
-      let response;
-
+      const tab = tabs.find((t) => t.id === activeTab);
+      let res;
       if (activeTab === "multimodal") {
         if (!selectedFile) {
-          alert("Please upload an image or PDF file.");
+          alert("Upload an image or PDF.");
           setLoading(false);
           return;
         }
-
-        const formData = new FormData();
-        formData.append("question", question);
-        formData.append("file", selectedFile);
-
-        response = await axios.post(
-          `${API_BASE}${currentTab.route}`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-      } else {
-        response = await axios.post(`${API_BASE}${currentTab.route}`, {
-          question,
+        const fd = new FormData();
+        fd.append("question", question);
+        fd.append("file", selectedFile);
+        res = await axios.post(`${API_BASE}${tab.route}`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
         });
+      } else {
+        res = await axios.post(`${API_BASE}${tab.route}`, { question });
       }
-
-      const responseAnswer = response.data.answer || "";
-      const responseSources = response.data.sources || [];
-      const responseAccessedDocuments = response.data.accessed_documents || [];
-      const responseSourceDocuments = response.data.source_documents || [];
-
-      setAnswer(responseAnswer);
-      setSources(responseSources);
-      setAccessedDocuments(responseAccessedDocuments);
-      setSourceDocuments(responseSourceDocuments);
-
+      const a = res.data.answer || "";
+      const s = res.data.sources || [];
+      const ad = res.data.accessed_documents || [];
+      const sd = res.data.source_documents || [];
+      setAnswer(a);
+      setSources(s);
+      setAccessedDocuments(ad);
+      setSourceDocuments(sd);
       saveToChatHistory({
         id: Date.now(),
         tabId: activeTab,
-        tabLabel: currentTab.label,
+        tabLabel: tab.label,
         question,
-        answer: responseAnswer,
-        sources: responseSources,
-        accessedDocuments: responseAccessedDocuments,
-        sourceDocuments: responseSourceDocuments,
-        createdAt: new Date().toLocaleString(),
+        answer: a,
+        sources: s,
+        accessedDocuments: ad,
+        sourceDocuments: sd,
+        createdAt: new Date().toLocaleTimeString(),
       });
-    } catch (error) {
-      console.error(error);
-
-      const errorMessage =
-        error.response?.data?.detail ||
-        error.message ||
-        "Something went wrong. Please check if backend is running.";
-
-      setAnswer(`Error: ${errorMessage}`);
+    } catch (e) {
+      setAnswer(`Error: ${e.response?.data?.detail || e.message || "Check backend."}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const currentTab = tabs.find((tab) => tab.id === activeTab);
   const ragExplanation = getRagExplanation();
+  const currentTab = tabs.find((t) => t.id === activeTab);
+  const currentInfo = exerciseInfo[activeTab];
 
   return (
-    <div className="app">
-      <header className="hero">
-        <div className="hero-badge">LlamaIndex + Document Workflow AI</div>
-        <h1>ClinicOps AI Assistant</h1>
-        <p>
-          Upload policies, PDFs, notes, or reports. Test RAG workflows, compare
-          evidence, and see how each answer was retrieved.
-        </p>
-      </header>
-
-      <section className="documents-card">
-        <div className="documents-hero">
-          <div className="documents-hero-copy">
-            <span className="section-kicker">Document workspace</span>
-            <h2>Manage the knowledge base</h2>
-            <p>
-              Upload, create, edit, and delete the files that power the RAG assistant.
-            </p>
-          </div>
-
-          <div className="documents-hero-actions">
-            <button className="sync-btn" onClick={loadDocuments} disabled={docLoading}>
-              {docLoading ? "Syncing..." : "↻ Sync"}
-            </button>
-            <button className="new-primary-btn" onClick={startNewDocument}>
-              + New Document
-            </button>
+    <div className="shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">♡</div>
+          <div>
+            <div className="brand-name">ClinicOps</div>
           </div>
         </div>
 
-        <div className="document-console">
-          <aside className="document-sidebar">
-            <div className="upload-panel">
-              <div className="upload-panel-top">
-                <div>
-                  <h3>Upload file</h3>
-                  <p>Supports .txt and text-based PDFs.</p>
-                </div>
-              </div>
-
-              <div className="file-picker">
-                <input
-                  type="file"
-                  accept=".txt,.pdf"
-                  onChange={(e) => setUploadFile(e.target.files[0])}
-                />
-              </div>
-
-              {uploadFile && <p className="selected-upload">{uploadFile.name}</p>}
-
-              <button
-                className="upload-doc-btn"
-                onClick={uploadNewDocument}
-                disabled={docLoading}
-              >
-                {docLoading ? "Uploading..." : "Upload"}
-              </button>
-
-              {uploadMessage && <p className="doc-message">{uploadMessage}</p>}
-            </div>
-
-            <div className="documents-list">
-              <div className="documents-list-header">
-                <div>
-                  <h3>Library</h3>
-                  <p>{documents.length} documents</p>
-                </div>
-              </div>
-
-              {documents.length === 0 && (
-                <p className="muted">No documents found.</p>
-              )}
-
-              <div className="doc-scroll">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.filename}
-                    className={
-                      selectedDocument === doc.filename
-                        ? "doc-row active-doc-row"
-                        : "doc-row"
-                    }
-                  >
-                    <button
-                      className="doc-item"
-                      onClick={() => loadDocumentContent(doc.filename)}
-                    >
-                      <span className="doc-icon">📄</span>
-                      <span>{doc.filename}</span>
-                    </button>
-
-                    <button
-                      className="delete-doc-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteDocument(doc.filename);
-                      }}
-                      title="Delete document"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-
-          <div className="document-editor">
-            <div className="editor-title-row">
-              <div>
-                <span className="section-kicker">
-                  {isCreatingDocument
-                    ? "New document"
-                    : selectedDocument
-                    ? "Editor"
-                    : "Preview"}
-                </span>
-                <h3>
-                  {isCreatingDocument
-                    ? "Create a new policy file"
-                    : selectedDocument
-                    ? selectedDocument
-                    : "Select a document to view or edit"}
-                </h3>
-              </div>
-
-              {isCreatingDocument && (
-                <button className="cancel-doc-btn" onClick={cancelNewDocument}>
-                  Cancel
-                </button>
-              )}
-            </div>
-
-            {isCreatingDocument && (
-              <div className="new-document-name-box">
-                <label>Document File Name</label>
-                <input
-                  type="text"
-                  value={newDocumentName}
-                  onChange={(e) => setNewDocumentName(e.target.value)}
-                  placeholder="example_policy.txt"
-                />
-              </div>
-            )}
-
-            <textarea
-              className="document-textarea"
-              value={documentContent}
-              onChange={(e) => setDocumentContent(e.target.value)}
-              placeholder={
-                isCreatingDocument
-                  ? "Start writing your new document here..."
-                  : "Document content will appear here..."
-              }
-              disabled={!selectedDocument && !isCreatingDocument}
-            />
-
-            <div className="document-actions">
-              <button
-                className="save-doc-btn"
-                onClick={saveDocumentContent}
-                disabled={(!selectedDocument && !isCreatingDocument) || docLoading}
-              >
-                {docLoading
-                  ? "Working..."
-                  : isCreatingDocument
-                  ? "Save New Document"
-                  : "Save Document"}
-              </button>
-
-              {docMessage && (
-                <p className="doc-message inline-message">{docMessage}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rag-shell">
-        <div className="tabs">
-          {tabs.map((tab) => (
+        <nav className="topnav">
+          {tabs.map((t) => (
             <button
-              key={tab.id}
-              className={activeTab === tab.id ? "tab active" : "tab"}
-              onClick={() => handleTabChange(tab.id)}
+              key={t.id}
+              className={`nav-tab${activeTab === t.id ? " nav-tab-active" : ""}`}
+              onClick={() => handleTabChange(t.id)}
             >
-              {tab.label}
+              {t.label}
             </button>
           ))}
+        </nav>
+
+        <div className="top-actions">
+          <button className="model-select">Claude Sonnet 4 <span>⌄</span></button>
+          <button className="settings-btn">⚙</button>
+          <div className="avatar">AK</div>
         </div>
+      </header>
 
-        <div className="workspace-grid">
-          <main className="card">
-            <div className="section-title">
-              <span className="section-kicker">RAG testing workspace</span>
-              <h2>{currentTab.label}</h2>
-              <p>Route: {currentTab.route}</p>
+      <div className="app-grid">
+        <aside className="sidebar left-panel">
+          <div className="panel-head">
+            <div className="panel-title">
+              <span>Library</span>
+              <span className="count-pill">{documents.length}</span>
             </div>
+            <div className="panel-actions">
+              <button className="square-btn" onClick={loadDocuments} disabled={docLoading} title="Refresh">↻</button>
+              <button className="square-btn primary" onClick={startNewDocument} title="New document">+</button>
+            </div>
+          </div>
 
-            <div className="explain-box">
-              <h3>{exerciseInfo[activeTab].title}</h3>
-
-              <div className="pipeline-steps">
-                {exerciseInfo[activeTab].steps.map((step, index) => (
-                  <div key={index} className="pipeline-step">
-                    <span>{index + 1}</span>
-                    <p>{step}</p>
-                  </div>
-                ))}
+          {leftView === "library" && (
+            <>
+              <div className="upload-card">
+                <label className="upload-drop">
+                  <input type="file" accept=".txt,.pdf" onChange={(e) => setUploadFile(e.target.files[0])} />
+                  <span className="upload-icon">☁</span>
+                  <span className="upload-main">{uploadFile ? uploadFile.name : "Drag & drop files here"}</span>
+                  <span className="upload-sub">or</span>
+                </label>
+                <button className="upload-btn" onClick={uploadNewDocument} disabled={docLoading || !uploadFile}>
+                  {docLoading ? "Uploading..." : "Upload"}
+                </button>
               </div>
-            </div>
 
-            <label>Question</label>
+              {uploadMessage && <p className="side-message">{uploadMessage}</p>}
 
-            <textarea
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question about your uploaded documents..."
-            />
-
-            <div className="action-row">
-              <button className="voice-btn" onClick={handleVoiceInput}>
-                {listening ? "Listening..." : "🎤 Speak Question"}
-              </button>
-
-              <button
-                className="sample-btn"
-                onClick={() => setQuestion(sampleQuestions[activeTab])}
-              >
-                Use Sample Question
-              </button>
-            </div>
-
-            {activeTab === "multimodal" && (
-              <div className="upload-box">
-                <label>Upload Image or PDF</label>
-
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp,.pdf,application/pdf"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
-                />
-
-                {selectedFile && (
-                  <p className="file-name">Selected file: {selectedFile.name}</p>
-                )}
+              <div className="search-box">
+                <span>⌕</span>
+                <input placeholder="Search documents..." readOnly />
               </div>
-            )}
 
-            <button className="submit-btn" onClick={handleSubmit} disabled={loading}>
-              {loading ? "Thinking..." : "Ask AI"}
-            </button>
+              <div className="doc-list">
+                {documents.length === 0 && <p className="left-empty">No documents yet.</p>}
+                {documents.map((doc) => {
+                  const isPdf = doc.filename.toLowerCase().endsWith(".pdf");
+                  return (
+                    <div key={doc.filename} className={`doc-row${selectedDocument === doc.filename ? " doc-row-active" : ""}`}>
+                      <button className="doc-row-btn" onClick={() => loadDocumentContent(doc.filename)}>
+                        <span className={`file-icon ${isPdf ? "pdf" : "txt"}`}>{isPdf ? "▣" : "▤"}</span>
+                        <span className="doc-row-name">{doc.filename}</span>
+                      </button>
+                      <button className="doc-row-del" onClick={(e) => { e.stopPropagation(); deleteDocument(doc.filename); }}>⋮</button>
+                    </div>
+                  );
+                })}
+              </div>
 
-            <div className="answer-box">
-              <h3>Answer</h3>
-
-              {loading && (
-                <div className="thinking-box">
-                  <div className="thinking-header">
-                    <div className="spinner"></div>
-                    <p>{loadingMessage[activeTab]}</p>
+              <div className="sidebar-footer">
+                <div className="storage-card">
+                  <div className="storage-icon">▰</div>
+                  <div className="storage-content">
+                    <div>Storage used</div>
+                    <span>128.4 MB of 5 GB</span>
+                    <div className="progress-line"><i /></div>
                   </div>
-
-                  <div className="thinking-steps">
-                    {(loadingSteps[activeTab] || []).map((step, index) => (
-                      <div
-                        key={index}
-                        className={
-                          index <= loadingStep
-                            ? "thinking-step active-thinking-step"
-                            : "thinking-step"
-                        }
-                      >
-                        <span>
-                          {index < loadingStep
-                            ? "✓"
-                            : index === loadingStep
-                            ? "•"
-                            : ""}
-                        </span>
-                        <p>{step}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="storage-percent">2%</span>
                 </div>
+                <button className="manage-btn"><span>⚙</span> Manage library <b>›</b></button>
+              </div>
+
+              {docMessage && <p className="side-message bottom-msg">{docMessage}</p>}
+            </>
+          )}
+
+          {leftView === "editor" && (
+            <div className="editor-view">
+              <div className="editor-view-top">
+                <button className="back-btn" onClick={() => setLeftView("library")}>← Library</button>
+                <span className="editor-view-status">{isCreatingDocument ? "New file" : "Editing"}</span>
+              </div>
+
+              {isCreatingDocument ? (
+                <input
+                  className="filename-input"
+                  value={newDocumentName}
+                  onChange={(e) => setNewDocumentName(e.target.value)}
+                  placeholder="filename.txt"
+                />
+              ) : (
+                <div className="filename-display">{selectedDocument}</div>
               )}
 
-              <div className="answer-text">
-                {answer || (!loading ? "Answer will appear here..." : "")}
+              <textarea
+                className="editor-ta"
+                value={documentContent}
+                onChange={(e) => setDocumentContent(e.target.value)}
+                placeholder={isCreatingDocument ? "Start writing..." : "Document content..."}
+              />
+
+              <div className="editor-view-footer">
+                <button className="save-btn" onClick={saveDocumentContent} disabled={docLoading}>
+                  {docLoading ? "Saving..." : isCreatingDocument ? "Save File" : "Save Changes"}
+                </button>
+                {isCreatingDocument && <button className="cancel-btn" onClick={cancelNewDocument}>Cancel</button>}
+                {docMessage && <span className="editor-msg">{docMessage}</span>}
               </div>
+            </div>
+          )}
+        </aside>
 
-              {ragExplanation && (
-                <div className="rag-explanation-box">
-                  <h3>How RAG Got This Answer</h3>
-
-                  <div className="rag-explanation-steps">
-                    {ragExplanation.map((step, index) => (
-                      <div key={index} className="rag-explanation-step">
-                        <span>{index + 1}</span>
-                        <p>{step}</p>
-                      </div>
-                    ))}
-                  </div>
+        <main className="main-panel">
+          <section className="hero-card">
+            <div className="hero-copy">
+              <div className="hero-icon">{currentInfo.icon}</div>
+              <div>
+                <div className="hero-title-row">
+                  <h1>{currentInfo.title}</h1>
+                  <code>{currentTab.route}</code>
                 </div>
+                <p>{currentInfo.desc}</p>
+              </div>
+            </div>
+            <div className="hero-art" aria-hidden="true">
+              <div className="paper-shape">▤</div>
+              <div className="cube cube-1" />
+              <div className="cube cube-2" />
+              <div className="cube cube-3" />
+              <div className="lens" />
+            </div>
+
+            <div className="steps-card">
+              {loadingSteps[activeTab].map((s, i) => (
+                <div key={i} className={`step-item${loading && i <= loadingStep ? " step-on" : ""}`}>
+                  <span className="step-num">{loading && i < loadingStep ? "✓" : i + 1}</span>
+                  <span>{s}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="question-card">
+            <h2>Ask a question about your documents</h2>
+            <div className="question-input-shell">
+              <textarea
+                className="q-input"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Type your question here..."
+                rows={4}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+              />
+
+              {activeTab === "multimodal" && (
+                <label className="mm-label">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp,.pdf,application/pdf"
+                    onChange={(e) => setSelectedFile(e.target.files[0])}
+                  />
+                  <span>{selectedFile ? `📎 ${selectedFile.name}` : "Attach image or PDF..."}</span>
+                </label>
+              )}
+
+              <div className="q-actions">
+                <button className="light-action" onClick={handleVoiceInput}>{listening ? "🔴 Listening..." : "⌕ Voice input"}</button>
+                <button className="light-action" onClick={() => setQuestion(sampleQuestions[activeTab])}>☰ Sample questions</button>
+                <span className="enter-hint">Press Enter to send</span>
+                <button className="ask-btn" onClick={handleSubmit} disabled={loading}>{loading ? "Thinking..." : "Ask AI  ▶"}</button>
+              </div>
+            </div>
+          </section>
+
+          {loading && (
+            <div className="loading-bar">
+              <span className="loading-dot" />
+              <span>{loadingSteps[activeTab][loadingStep]}</span>
+            </div>
+          )}
+
+          {answer ? (
+            <section className="answer-card">
+              <div className="answer-head">
+                <span>Answer</span>
+                {sourceDocuments.length > 0 && (
+                  <b>{sourceDocuments.length} source{sourceDocuments.length !== 1 ? "s" : ""}</b>
+                )}
+              </div>
+              <div className="answer-text">{answer}</div>
+
+              {ragExplanation && ragExplanation.length > 0 && (
+                <details className="rag-trace">
+                  <summary>How RAG got this answer</summary>
+                  <ul>{ragExplanation.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                </details>
               )}
 
               {(accessedDocuments.length > 0 || sourceDocuments.length > 0) && (
-                <div className="source-summary-box">
+                <div className="tag-section">
                   {accessedDocuments.length > 0 && (
-                    <div>
-                      <h4>Documents Accessed</h4>
-                      <div className="source-tags">
-                        {accessedDocuments.map((doc) => (
-                          <span key={doc}>{doc}</span>
-                        ))}
-                      </div>
+                    <div className="tag-group">
+                      <span className="tag-label">Accessed</span>
+                      {accessedDocuments.map((d) => <span key={d} className="tag">{d}</span>)}
                     </div>
                   )}
-
                   {sourceDocuments.length > 0 && (
-                    <div>
-                      <h4>Documents Used for Evidence</h4>
-                      <div className="source-tags used-tags">
-                        {sourceDocuments.map((doc) => (
-                          <span key={doc}>{doc}</span>
-                        ))}
-                      </div>
+                    <div className="tag-group">
+                      <span className="tag-label">Used as evidence</span>
+                      {sourceDocuments.map((d) => <span key={d} className="tag green">{d}</span>)}
                     </div>
                   )}
                 </div>
               )}
 
               {sources.length > 0 && (
-                <div className="sources-box">
-                  <h3>Retrieved Evidence</h3>
-
-                  {sources.map((source, index) => (
-                    <div key={index} className="source-card">
-                      <div className="source-card-header">
-                        <strong>{source.document}</strong>
-                        {source.score !== null && source.score !== undefined && (
-                          <span>Score: {source.score}</span>
-                        )}
+                <div className="evidence">
+                  <span className="evidence-heading">Retrieved evidence</span>
+                  {sources.map((s, i) => (
+                    <div key={i} className="ev-card">
+                      <div className="ev-card-top">
+                        <strong>{s.document}</strong>
+                        {s.score != null && <span>score {s.score}</span>}
                       </div>
-                      <p>{source.excerpt}</p>
+                      <p>{s.excerpt}</p>
                     </div>
                   ))}
                 </div>
               )}
+            </section>
+          ) : (
+            !loading && (
+              <section className="empty-answer-card">
+                <div className="empty-bubble">☁</div>
+                <h3>Your answer will appear here</h3>
+                <p>Ask a question above — the AI will retrieve and reason over your documents.</p>
+              </section>
+            )
+          )}
+        </main>
+
+        <aside className="sidebar right-panel">
+          <div className="panel-head history-head">
+            <div className="panel-title">History</div>
+            <button className="clear-btn" onClick={() => setChatHistory([])}>Clear</button>
+          </div>
+
+          {chatHistory.length === 0 ? (
+            <div className="history-empty">
+              <div className="clock-icon">◷</div>
+              <h3>No queries yet</h3>
+              <p>Your recent queries and answers will appear here.</p>
             </div>
-          </main>
-
-          <aside className="history-card">
-            <div className="history-header">
-              <div>
-                <span className="section-kicker">Session</span>
-                <h2>Chat History</h2>
-              </div>
-              <button onClick={clearChatHistory}>Clear</button>
-            </div>
-
-            {chatHistory.length === 0 && (
-              <p className="muted">No questions asked yet.</p>
-            )}
-
-            <div className="history-list">
+          ) : (
+            <div className="right-list">
               {chatHistory.map((item) => (
-                <button
-                  key={item.id}
-                  className="history-item"
-                  onClick={() => restoreHistoryItem(item)}
-                >
+                <button key={item.id} className="hist-item" onClick={() => restoreHistoryItem(item)}>
                   <span>{item.tabLabel}</span>
                   <p>{item.question}</p>
                   <small>{item.createdAt}</small>
                 </button>
               ))}
             </div>
-          </aside>
-        </div>
-      </section>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
