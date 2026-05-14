@@ -1300,3 +1300,48 @@ button {
     opacity: 0.35;
   }
 }
+
+/* Strong fix: keep typed text visible across browsers/devices */
+textarea,
+input,
+.q-input,
+.editor-ta,
+.filename-input,
+.search-box input {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: #ffffff !important;
+  caret-color: #111827 !important;
+  opacity: 1 !important;
+}
+
+/* Placeholder text should stay visible but lighter */
+textarea::placeholder,
+input::placeholder,
+.q-input::placeholder,
+.editor-ta::placeholder,
+.filename-input::placeholder,
+.search-box input::placeholder {
+  color: #667085 !important;
+  -webkit-text-fill-color: #667085 !important;
+  opacity: 1 !important;
+}
+
+/* Keep dark text on focus */
+textarea:focus,
+input:focus,
+.q-input:focus,
+.editor-ta:focus,
+.filename-input:focus,
+.search-box input:focus {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  caret-color: #111827 !important;
+}
+
+/* Chrome/Safari autofill or browser rendering fix */
+input:-webkit-autofill,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: #111827 !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
