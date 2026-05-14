@@ -84,7 +84,7 @@ function App() {
       title: "What ReAct Agent is doing",
       steps: [
         "Reads the question and decides which tool to use.",
-        "Can use document search, calculator, or policy summary tool.",
+        "Can use document search, calculator, LLM knowledge or policy summary tool.",
         "Runs the selected tool.",
         "Returns the final answer based on the tool result.",
       ],

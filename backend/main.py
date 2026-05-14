@@ -4,6 +4,7 @@ import re
 import base64
 import mimetypes
 from pathlib import Path
+from typing import Optional, Tuple, List, Dict, Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -16,8 +17,6 @@ from anthropic import Anthropic as AnthropicClient
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.llms.anthropic import Anthropic
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-## from llama_index.core.embeddings import MockEmbedding
-
 from llama_index.core.tools import QueryEngineTool, FunctionTool
 from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
@@ -33,6 +32,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://138.128.246.211",
+        "http://138.128.246.211:8000",
+        "http://ananya-clinicops.stackyon.com",
+        "https://ananya-clinicops.stackyon.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -41,14 +44,13 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_PATH = BASE_DIR / "data"
-DATA_DIR = str(DATA_PATH)
+DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("ANTHROPIC_API_KEY is missing in .env")
-
 
 Settings.llm = Anthropic(
     model=ANTHROPIC_MODEL,
@@ -57,12 +59,9 @@ Settings.llm = Anthropic(
 
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
-# Settings.embed_model = MockEmbedding(embed_dim=384)
 )
 
-anthropic_client = AnthropicClient(
-    api_key=ANTHROPIC_API_KEY
-)
+anthropic_client = AnthropicClient(api_key=ANTHROPIC_API_KEY)
 
 
 class QueryRequest(BaseModel):
@@ -109,48 +108,45 @@ def list_exercises():
                 "id": 1,
                 "name": "Basic RAG",
                 "route": "/basic-rag/query",
-                "description": "Answers questions from all clinic documents using vector search.",
+                "description": "Searches all uploaded, created, and edited text documents.",
             },
             {
                 "id": 2,
-                "name": "Router Query Engine",
+                "name": "Dynamic Router RAG",
                 "route": "/router-rag/query",
-                "description": "Routes the question to appointment, billing, or insurance policy.",
+                "description": "Routes the question to the most relevant document dynamically.",
             },
             {
                 "id": 3,
-                "name": "SubQuestion RAG",
+                "name": "Dynamic SubQuestion RAG",
                 "route": "/subquestion-rag/query",
-                "description": "Checks multiple policy documents and combines the answer.",
+                "description": "Classifies documents as relevant or not relevant, then checks relevant documents.",
             },
             {
                 "id": 4,
                 "name": "ReAct Agent",
                 "route": "/react-agent/query",
-                "description": "Uses tools like document search, calculator, and policy summarizer.",
+                "description": "Uses document search, calculator, and general LLM knowledge when needed.",
             },
             {
                 "id": 5,
                 "name": "Dynamic Multi Document Agent",
                 "route": "/multi-doc-agent/query",
-                "description": "Automatically creates tools from every .txt document in the data folder.",
+                "description": "Creates a tool for every uploaded text document dynamically.",
             },
             {
                 "id": 6,
                 "name": "Multimodal RAG",
                 "route": "/multimodal-rag/query",
-                "description": "Reads uploaded images like forms, insurance cards, and workflow diagrams.",
+                "description": "Analyzes uploaded images or PDFs. PDFs are also saved as extracted text.",
             },
         ]
     }
 
 
 # ---------------------------------------------------------
-# Document Management APIs
+# File and Document Helpers
 # ---------------------------------------------------------
-
-ALLOWED_DOC_EXTENSIONS = [".txt"]
-
 
 def clean_filename(filename: str) -> str:
     filename = filename.replace(" ", "_")
@@ -163,43 +159,89 @@ def safe_document_path(filename: str) -> Path:
     file_path = (DATA_PATH / filename).resolve()
 
     if DATA_PATH.resolve() not in file_path.parents and file_path != DATA_PATH.resolve():
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail="Invalid file path.")
 
-    if file_path.suffix not in ALLOWED_DOC_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Only editable .txt files are supported")
+    if file_path.suffix.lower() != ".txt":
+        raise HTTPException(status_code=400, detail="Only editable .txt files are supported.")
 
     return file_path
 
 
-def get_all_document_names():
+def get_txt_files() -> List[Path]:
     if not DATA_PATH.exists():
         return []
 
     return sorted(
-        [
-            file_path.name
-            for file_path in DATA_PATH.iterdir()
-            if file_path.is_file() and file_path.suffix == ".txt"
-        ]
+        file_path
+        for file_path in DATA_PATH.glob("*.txt")
+        if file_path.is_file()
     )
 
+
+def get_all_document_names() -> List[str]:
+    return [file_path.name for file_path in get_txt_files()]
+
+
+def get_document_preview(file_path: Path, max_chars: int = 900) -> str:
+    try:
+        preview_text = file_path.read_text(encoding="utf-8", errors="ignore")
+        preview_text = " ".join(preview_text.split())
+        return preview_text[:max_chars]
+    except Exception:
+        return ""
+
+
+def extract_pdf_text(file_bytes: bytes, max_pages: Optional[int] = None) -> str:
+    pdf_reader = PdfReader(io.BytesIO(file_bytes))
+    pages = pdf_reader.pages
+
+    if max_pages is not None:
+        pages = pages[:max_pages]
+
+    extracted_pages = []
+
+    for page_num, page in enumerate(pages, start=1):
+        page_text = page.extract_text() or ""
+
+        if page_text.strip():
+            extracted_pages.append(f"\n--- Page {page_num} ---\n{page_text.strip()}")
+
+    return "\n".join(extracted_pages).strip()
+
+
+def save_pdf_as_extracted_txt(original_filename: str, file_bytes: bytes) -> Tuple[str, str]:
+    cleaned_name = clean_filename(original_filename)
+    pdf_stem = Path(cleaned_name).stem
+    final_filename = f"{pdf_stem}_extracted.txt"
+
+    content = extract_pdf_text(file_bytes)
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract text from this PDF. It may be scanned/image-based.",
+        )
+
+    file_path = safe_document_path(final_filename)
+    file_path.write_text(content, encoding="utf-8")
+
+    return final_filename, content
+
+
+# ---------------------------------------------------------
+# Document Management APIs
+# ---------------------------------------------------------
 
 @app.get("/documents")
 def list_documents():
     try:
-        documents = []
-
-        if not DATA_PATH.exists():
-            DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-        for file_path in DATA_PATH.iterdir():
-            if file_path.is_file() and file_path.suffix == ".txt":
-                documents.append(
-                    {
-                        "filename": file_path.name,
-                        "path": str(file_path),
-                    }
-                )
+        documents = [
+            {
+                "filename": file_path.name,
+                "path": str(file_path),
+            }
+            for file_path in get_txt_files()
+        ]
 
         documents.sort(key=lambda x: x["filename"])
 
@@ -215,13 +257,11 @@ def get_document(filename: str):
         file_path = safe_document_path(filename)
 
         if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        content = file_path.read_text(encoding="utf-8")
+            raise HTTPException(status_code=404, detail="Document not found.")
 
         return {
-            "filename": filename,
-            "content": content,
+            "filename": file_path.name,
+            "content": file_path.read_text(encoding="utf-8", errors="ignore"),
         }
 
     except HTTPException:
@@ -236,13 +276,13 @@ def update_document(filename: str, request: DocumentUpdateRequest):
         file_path = safe_document_path(filename)
 
         if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise HTTPException(status_code=404, detail="Document not found.")
 
         file_path.write_text(request.content, encoding="utf-8")
 
         return {
             "message": "Document updated successfully",
-            "filename": filename,
+            "filename": file_path.name,
         }
 
     except HTTPException:
@@ -257,13 +297,13 @@ def delete_document(filename: str):
         file_path = safe_document_path(filename)
 
         if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise HTTPException(status_code=404, detail="Document not found.")
 
         file_path.unlink()
 
         return {
             "message": "Document deleted successfully",
-            "filename": filename,
+            "filename": file_path.name,
         }
 
     except HTTPException:
@@ -275,17 +315,13 @@ def delete_document(filename: str):
 @app.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     try:
-        if not DATA_PATH.exists():
-            DATA_PATH.mkdir(parents=True, exist_ok=True)
-
         original_filename = file.filename
 
         if not original_filename:
-            raise HTTPException(status_code=400, detail="Filename is missing")
+            raise HTTPException(status_code=400, detail="Filename is missing.")
 
         cleaned_name = clean_filename(original_filename)
         suffix = Path(cleaned_name).suffix.lower()
-
         file_bytes = await file.read()
 
         if suffix == ".txt":
@@ -295,34 +331,17 @@ async def upload_document(file: UploadFile = File(...)):
                 content = file_bytes.decode("latin-1")
 
             final_filename = cleaned_name
+            file_path = safe_document_path(final_filename)
+            file_path.write_text(content, encoding="utf-8")
 
         elif suffix == ".pdf":
-            pdf_reader = PdfReader(io.BytesIO(file_bytes))
-            extracted_pages = []
-
-            for page_num, page in enumerate(pdf_reader.pages, start=1):
-                page_text = page.extract_text() or ""
-                extracted_pages.append(f"\n--- Page {page_num} ---\n{page_text}")
-
-            content = "\n".join(extracted_pages).strip()
-
-            if not content:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not extract text from this PDF. It may be scanned/image-based.",
-                )
-
-            pdf_stem = Path(cleaned_name).stem
-            final_filename = f"{pdf_stem}_extracted.txt"
+            final_filename, content = save_pdf_as_extracted_txt(original_filename, file_bytes)
 
         else:
             raise HTTPException(
                 status_code=400,
                 detail="Only .txt and .pdf files are supported.",
             )
-
-        file_path = safe_document_path(final_filename)
-        file_path.write_text(content, encoding="utf-8")
 
         return {
             "message": "Document uploaded successfully",
@@ -338,10 +357,14 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------
-# Source Tracking Helpers
+# Source Helpers
 # ---------------------------------------------------------
 
-def extract_sources_from_response(response, max_sources: int = 5):
+def extract_sources_from_response(
+    response,
+    max_sources: int = 5,
+    min_score: Optional[float] = None,
+):
     sources = []
     seen = set()
 
@@ -349,7 +372,13 @@ def extract_sources_from_response(response, max_sources: int = 5):
 
     for source_node in source_nodes:
         node = getattr(source_node, "node", None)
+
         if node is None:
+            continue
+
+        score = getattr(source_node, "score", None)
+
+        if min_score is not None and score is not None and float(score) < min_score:
             continue
 
         metadata = getattr(node, "metadata", {}) or {}
@@ -366,8 +395,7 @@ def extract_sources_from_response(response, max_sources: int = 5):
         except Exception:
             text = getattr(node, "text", "")
 
-        excerpt = " ".join((text or "").split())
-        excerpt = excerpt[:700]
+        excerpt = " ".join((text or "").split())[:700]
 
         if not excerpt:
             continue
@@ -378,8 +406,6 @@ def extract_sources_from_response(response, max_sources: int = 5):
             continue
 
         seen.add(key)
-
-        score = getattr(source_node, "score", None)
 
         sources.append(
             {
@@ -395,7 +421,7 @@ def extract_sources_from_response(response, max_sources: int = 5):
     return sources
 
 
-def unique_documents_from_sources(sources):
+def unique_documents_from_sources(sources: List[Dict[str, Any]]) -> List[str]:
     documents = []
 
     for source in sources:
@@ -405,6 +431,19 @@ def unique_documents_from_sources(sources):
             documents.append(document)
 
     return documents
+
+
+def general_llm_source():
+    return [
+        {
+            "document": "General LLM knowledge",
+            "score": None,
+            "excerpt": (
+                "The ReAct agent answered using the LLM's general knowledge because "
+                "the uploaded documents did not contain strong matching evidence for this question."
+            ),
+        }
+    ]
 
 
 def clean_final_answer_prompt(question: str, raw_answer: str) -> str:
@@ -427,91 +466,191 @@ Rules:
 
 
 # ---------------------------------------------------------
-# Helper Functions
+# Relevance Classification
 # ---------------------------------------------------------
 
-def build_single_file_query_engine(file_path: str):
+def classify_document_relevance(question: str, file_path: Path) -> dict:
+    """
+    Generic relevance classifier.
+    No hardcoded document types.
+    It decides relevance only from the user question, document name, and document preview.
+    """
     try:
-        documents = SimpleDirectoryReader(input_files=[file_path]).load_data()
+        preview = get_document_preview(file_path, max_chars=1200)
 
-        if not documents:
-            raise HTTPException(
-                status_code=400,
-                detail=f"No documents found in file: {file_path}",
+        prompt = f"""
+User question:
+{question}
+
+Document name:
+{file_path.name}
+
+Document preview:
+{preview}
+
+Decide if this document is relevant for answering the user's question.
+
+Return exactly in this format:
+Label: Relevant or Not Relevant
+Reason: one short sentence
+
+Rules:
+- Mark Relevant only if this document can directly help answer the user's specific question.
+- Mark Not Relevant if this document does not contain useful information for this specific question.
+- Do not mark a document relevant just because it shares one broad or generic word with the question.
+- Do not use the document as evidence unless it provides meaningful support for the answer.
+- Classify based only on the user question, document name, and document preview.
+"""
+
+        response = Settings.llm.complete(prompt)
+        text = str(response).strip()
+        lower_text = text.lower()
+
+        if "label: not relevant" in lower_text:
+            label = "Not Relevant"
+        elif "label: relevant" in lower_text:
+            label = "Relevant"
+        else:
+            label = "Not Relevant"
+
+        reason = ""
+
+        for line in text.splitlines():
+            if line.lower().startswith("reason:"):
+                reason = line.split(":", 1)[1].strip()
+                break
+
+        if not reason:
+            reason = text[:250]
+
+        return {
+            "document": file_path.name,
+            "label": label,
+            "reason": reason,
+        }
+
+    except Exception as e:
+        return {
+            "document": file_path.name,
+            "label": "Not Relevant",
+            "reason": f"Could not classify relevance: {str(e)}",
+        }
+
+
+def classify_all_documents(question: str):
+    relevance_results = []
+    relevant_files = []
+    irrelevant_documents = []
+
+    for file_path in get_txt_files():
+        relevance = classify_document_relevance(question, file_path)
+        relevance_results.append(relevance)
+
+        if relevance["label"] == "Relevant":
+            relevant_files.append(file_path)
+        else:
+            irrelevant_documents.append(
+                {
+                    "document": file_path.name,
+                    "reason": relevance["reason"],
+                }
             )
 
-        index = VectorStoreIndex.from_documents(documents)
-        return index.as_query_engine(similarity_top_k=3)
+    return relevance_results, relevant_files, irrelevant_documents
 
+
+# ---------------------------------------------------------
+# Query Engine Helpers
+# ---------------------------------------------------------
+
+def build_query_engine_from_files(files: List[Path], similarity_top_k: int = 3):
+    try:
+        if not files:
+            raise HTTPException(status_code=400, detail="No relevant documents found.")
+
+        documents = SimpleDirectoryReader(
+            input_files=[str(file_path) for file_path in files]
+        ).load_data()
+
+        if not documents:
+            raise HTTPException(status_code=400, detail="No readable documents found.")
+
+        index = VectorStoreIndex.from_documents(documents)
+        return index.as_query_engine(similarity_top_k=similarity_top_k)
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def build_policy_tools():
-    appointment_engine = build_single_file_query_engine(
-        str(DATA_PATH / "appointment_policy.txt")
-    )
+def build_single_file_query_engine(file_path: Path):
+    return build_query_engine_from_files([file_path], similarity_top_k=3)
 
-    billing_engine = build_single_file_query_engine(
-        str(DATA_PATH / "billing_policy.txt")
-    )
 
-    insurance_engine = build_single_file_query_engine(
-        str(DATA_PATH / "insurance_policy.txt")
-    )
+def build_basic_rag_engine():
+    """
+    Reads only clean .txt files.
+    Raw PDFs are not indexed directly.
+    PDFs are converted into *_extracted.txt during upload.
+    """
+    return build_query_engine_from_files(get_txt_files(), similarity_top_k=3)
 
-    appointment_tool = QueryEngineTool.from_defaults(
-        query_engine=appointment_engine,
-        name="appointment_policy",
-        description=(
-            "Useful for questions about appointments, cancellations, "
-            "rescheduling, no-shows, and patient arrival time."
-        ),
-    )
 
-    billing_tool = QueryEngineTool.from_defaults(
-        query_engine=billing_engine,
-        name="billing_policy",
-        description=(
-            "Useful for questions about billing, fees, payment plans, "
-            "out-of-pocket costs, and billing support."
-        ),
-    )
+# ---------------------------------------------------------
+# Dynamic Router Tools
+# ---------------------------------------------------------
 
-    insurance_tool = QueryEngineTool.from_defaults(
-        query_engine=insurance_engine,
-        name="insurance_policy",
-        description=(
-            "Useful for questions about insurance, Medicaid, prior authorization, "
-            "coverage, and plan networks."
-        ),
-    )
+def build_router_tools():
+    try:
+        tools = []
 
-    return [appointment_tool, billing_tool, insurance_tool]
+        txt_files = get_txt_files()
+
+        if not txt_files:
+            raise HTTPException(status_code=400, detail="No .txt documents found.")
+
+        for file_path in txt_files:
+            document_engine = build_single_file_query_engine(file_path)
+
+            tool_name = file_path.stem.replace("-", "_").replace(" ", "_")
+            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
+
+            preview_text = get_document_preview(file_path)
+
+            description = f"""
+Use this tool only when the user question is related to this uploaded document.
+
+Document name:
+{file_path.name}
+
+Document preview:
+{preview_text}
+
+Choose this tool only if the document name or preview contains meaningful information
+that can help answer the user's specific question.
+Do not choose this tool only because of a broad or generic word overlap.
+"""
+
+            document_tool = QueryEngineTool.from_defaults(
+                query_engine=document_engine,
+                name=f"{tool_name}_router_tool",
+                description=description,
+            )
+
+            tools.append(document_tool)
+
+        return tools
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------
 # Exercise 1: Basic RAG
 # ---------------------------------------------------------
-
-def build_basic_rag_engine():
-    try:
-        documents = SimpleDirectoryReader(DATA_DIR).load_data()
-
-        if not documents:
-            raise HTTPException(
-                status_code=400,
-                detail="No documents found in data folder.",
-            )
-
-        index = VectorStoreIndex.from_documents(documents)
-        query_engine = index.as_query_engine(similarity_top_k=3)
-
-        return query_engine
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/basic-rag/query")
 def basic_rag_query(request: QueryRequest):
@@ -539,28 +678,19 @@ def basic_rag_query(request: QueryRequest):
 
 
 # ---------------------------------------------------------
-# Exercise 2: Router Query Engine
+# Exercise 2: Dynamic Router RAG
 # ---------------------------------------------------------
 
-def build_router_query_engine():
+@app.post("/router-rag/query")
+def router_rag_query(request: QueryRequest):
     try:
-        tools = build_policy_tools()
+        tools = build_router_tools()
 
         router_engine = RouterQueryEngine(
             selector=LLMSingleSelector.from_defaults(),
             query_engine_tools=tools,
         )
 
-        return router_engine
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/router-rag/query")
-def router_rag_query(request: QueryRequest):
-    try:
-        router_engine = build_router_query_engine()
         response = router_engine.query(request.question)
 
         clean_response = Settings.llm.complete(
@@ -570,7 +700,7 @@ def router_rag_query(request: QueryRequest):
         sources = extract_sources_from_response(response)
 
         return {
-            "exercise": "Router Query Engine",
+            "exercise": "Dynamic Router RAG",
             "question": request.question,
             "answer": str(clean_response),
             "accessed_documents": unique_documents_from_sources(sources),
@@ -583,60 +713,114 @@ def router_rag_query(request: QueryRequest):
 
 
 # ---------------------------------------------------------
-# Exercise 3: Custom SubQuestion RAG
+# Exercise 3: Dynamic SubQuestion RAG with Generic Relevance Filtering
 # ---------------------------------------------------------
 
 def build_custom_subquestion_response(question: str):
     try:
-        appointment_engine = build_single_file_query_engine(
-            str(DATA_PATH / "appointment_policy.txt")
-        )
+        txt_files = get_txt_files()
 
-        billing_engine = build_single_file_query_engine(
-            str(DATA_PATH / "billing_policy.txt")
-        )
+        if not txt_files:
+            raise HTTPException(status_code=400, detail="No .txt documents found.")
 
-        insurance_engine = build_single_file_query_engine(
-            str(DATA_PATH / "insurance_policy.txt")
-        )
+        relevance_results, relevant_files, irrelevant_documents = classify_all_documents(question)
 
-        appointment_answer = appointment_engine.query(question)
-        billing_answer = billing_engine.query(question)
-        insurance_answer = insurance_engine.query(question)
-
+        sub_answers = {}
         all_sources = []
-        all_sources.extend(extract_sources_from_response(appointment_answer, max_sources=2))
-        all_sources.extend(extract_sources_from_response(billing_answer, max_sources=2))
-        all_sources.extend(extract_sources_from_response(insurance_answer, max_sources=2))
+        relevant_documents = []
 
-        synthesis_prompt = f"""
+        for file_path in relevant_files:
+            relevant_documents.append(file_path.name)
+
+            try:
+                engine = build_single_file_query_engine(file_path)
+
+                doc_question = f"""
 User question:
 {question}
 
-Appointment policy answer:
-{appointment_answer}
+Use only this document:
+{file_path.name}
 
-Billing policy answer:
-{billing_answer}
+Document preview:
+{get_document_preview(file_path, max_chars=700)}
 
-Insurance policy answer:
-{insurance_answer}
-
-Combine the useful information into one clear final answer.
-If one policy is not relevant, ignore it.
-Do not use markdown formatting.
+Instructions:
+- Answer briefly using only this document.
+- If this document does not actually contain useful evidence, say exactly: Not relevant.
 """
 
-        final_response = Settings.llm.complete(synthesis_prompt)
+                doc_response = engine.query(doc_question)
+                doc_answer = str(doc_response).strip()
+
+                if "not relevant" in doc_answer.lower():
+                    irrelevant_documents.append(
+                        {
+                            "document": file_path.name,
+                            "reason": "The document was initially classified as relevant but did not provide useful answer evidence.",
+                        }
+                    )
+                    continue
+
+                sub_answers[file_path.name] = doc_answer
+
+                sources = extract_sources_from_response(
+                    doc_response,
+                    max_sources=2,
+                    min_score=0.25,
+                )
+
+                if sources:
+                    all_sources.extend(sources)
+
+            except Exception as e:
+                sub_answers[file_path.name] = f"Error checking document: {str(e)}"
+
+        if not sub_answers:
+            final_answer = f"""
+I checked the uploaded documents, but none of them were relevant enough to answer this question.
+
+Document relevance results:
+{relevance_results}
+"""
+        else:
+            synthesis_prompt = f"""
+User question:
+{question}
+
+Relevant document-level answers:
+{sub_answers}
+
+Documents classified as not relevant:
+{irrelevant_documents}
+
+Create one final answer.
+
+Rules:
+- Use only the relevant document-level answers as evidence.
+- Clearly mention which documents were relevant.
+- Clearly mention which documents were not relevant if the user asks about relevance.
+- Do not use irrelevant documents as evidence.
+- Do not use markdown tables.
+- Do not use # headings.
+- Keep it clear and concise.
+"""
+
+            final_response = Settings.llm.complete(synthesis_prompt)
+            final_answer = str(final_response)
 
         return {
-            "appointment_answer": str(appointment_answer),
-            "billing_answer": str(billing_answer),
-            "insurance_answer": str(insurance_answer),
-            "final_answer": str(final_response),
+            "sub_answers": sub_answers,
+            "final_answer": final_answer,
             "sources": all_sources,
+            "accessed_documents": relevant_documents,
+            "relevant_documents": relevant_documents,
+            "irrelevant_documents": irrelevant_documents,
+            "relevance_results": relevance_results,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -653,20 +837,15 @@ def subquestion_rag_query(request: QueryRequest):
         sources = result["sources"]
 
         return {
-            "exercise": "Custom SubQuestion RAG",
+            "exercise": "Dynamic SubQuestion RAG",
             "question": request.question,
-            "sub_answers": {
-                "appointment_policy": result["appointment_answer"],
-                "billing_policy": result["billing_answer"],
-                "insurance_policy": result["insurance_answer"],
-            },
+            "sub_answers": result["sub_answers"],
             "answer": str(clean_response),
-            "accessed_documents": [
-                "appointment_policy.txt",
-                "billing_policy.txt",
-                "insurance_policy.txt",
-            ],
+            "accessed_documents": result["relevant_documents"],
             "source_documents": unique_documents_from_sources(sources),
+            "relevant_documents": result["relevant_documents"],
+            "irrelevant_documents": result["irrelevant_documents"],
+            "relevance_results": result["relevance_results"],
             "sources": sources,
         }
 
@@ -690,46 +869,45 @@ def calculate_patient_payment(total_fee: float, insurance_coverage_percent: floa
     )
 
 
-def summarize_policy_area(policy_area: str) -> str:
-    policy_area = policy_area.lower()
+def general_llm_answer(question: str) -> str:
+    prompt = f"""
+User question:
+{question}
 
-    if "appointment" in policy_area:
-        return (
-            "Appointment policy summary: Patients should arrive 15 minutes early. "
-            "Cancellations should happen at least 24 hours before the visit. "
-            "After three no-shows, administrator approval may be required."
-        )
+Answer using your general knowledge.
 
-    if "billing" in policy_area:
-        return (
-            "Billing policy summary: Late cancellations may result in a $25 fee. "
-            "Patients may pay out of pocket if insurance cannot be verified. "
-            "Billing support is available Monday through Friday from 9 AM to 5 PM."
-        )
+Rules:
+- Clearly say this answer is based on general LLM knowledge, not uploaded documents.
+- Do not claim to access live internet.
+- If the question needs current/live facts, say that a live API or web search tool would be needed.
+- Keep it concise and clear.
+"""
 
-    if "insurance" in policy_area:
-        return (
-            "Insurance policy summary: Patients must provide insurance details before the visit. "
-            "The clinic accepts most major commercial plans. Medicaid depends on state and network, "
-            "and prior authorization may be required for some services."
-        )
-
-    return "Please choose appointment, billing, or insurance."
+    response = Settings.llm.complete(prompt)
+    return str(response)
 
 
 async def build_react_agent_response(question: str):
     try:
-        policy_query_engine = build_basic_rag_engine()
+        tools = []
 
-        policy_search_tool = QueryEngineTool.from_defaults(
-            query_engine=policy_query_engine,
-            name="clinic_policy_search",
-            description=(
-                "Use this tool to answer questions from clinic documents about "
-                "appointments, billing, insurance, cancellations, no-shows, referrals, "
-                "prior authorization, and admin policies."
-            ),
-        )
+        txt_files = get_txt_files()
+
+        if txt_files:
+            document_query_engine = build_basic_rag_engine()
+
+            uploaded_document_search_tool = QueryEngineTool.from_defaults(
+                query_engine=document_query_engine,
+                name="uploaded_document_search",
+                description=(
+                    "Use this tool only when the answer may be found in uploaded, created, or edited documents. "
+                    "Uploaded PDFs are available only after being extracted into text documents."
+                ),
+            )
+
+            tools.append(uploaded_document_search_tool)
+        else:
+            document_query_engine = None
 
         payment_calculator_tool = FunctionTool.from_defaults(
             fn=calculate_patient_payment,
@@ -740,28 +918,39 @@ async def build_react_agent_response(question: str):
             ),
         )
 
-        policy_summary_tool = FunctionTool.from_defaults(
-            fn=summarize_policy_area,
-            name="policy_summary_tool",
+        general_knowledge_tool = FunctionTool.from_defaults(
+            fn=general_llm_answer,
+            name="general_llm_knowledge",
             description=(
-                "Use this tool to summarize appointment, billing, or insurance policy areas."
+                "Use this tool when uploaded documents do not contain enough information "
+                "or when the question is general knowledge. This does not access live internet."
             ),
         )
 
+        tools.extend([payment_calculator_tool, general_knowledge_tool])
+
         agent = ReActAgent(
-            tools=[
-                policy_search_tool,
-                payment_calculator_tool,
-                policy_summary_tool,
-            ],
+            tools=tools,
             llm=Settings.llm,
         )
 
         agent_question = f"""
+User question:
 {question}
 
-Please answer in clean professional plain English.
-Do not use markdown tables, # headings, or **bold markdown**.
+You can use:
+1. uploaded_document_search if the answer may be in uploaded documents,
+2. patient_payment_calculator for payment calculations,
+3. general_llm_knowledge when uploaded documents do not contain enough information.
+
+Important:
+- Do not restrict yourself to one domain.
+- Uploaded documents can be about any topic.
+- If you use general knowledge, say it is based on general LLM knowledge.
+- Do not claim live internet access.
+- For live/current information, say a live API or web search tool would be needed.
+- Answer in clean professional plain English.
+- Do not use markdown tables, # headings, or **bold markdown**.
 """
 
         response = await agent.run(agent_question)
@@ -770,8 +959,27 @@ Do not use markdown tables, # headings, or **bold markdown**.
             clean_final_answer_prompt(question, str(response))
         )
 
-        source_probe_response = policy_query_engine.query(question)
-        sources = extract_sources_from_response(source_probe_response)
+        sources = []
+
+        if txt_files and document_query_engine is not None:
+            relevance_results, relevant_files, _ = classify_all_documents(question)
+
+            if relevant_files:
+                for file_path in relevant_files:
+                    try:
+                        engine = build_single_file_query_engine(file_path)
+                        source_probe_response = engine.query(question)
+                        file_sources = extract_sources_from_response(
+                            source_probe_response,
+                            max_sources=1,
+                            min_score=0.30,
+                        )
+                        sources.extend(file_sources)
+                    except Exception:
+                        continue
+
+        if not sources:
+            sources = general_llm_source()
 
         return {
             "answer": str(clean_response),
@@ -807,33 +1015,30 @@ async def react_agent_query(request: QueryRequest):
 def build_dynamic_document_tools():
     try:
         tools = []
-
-        if not DATA_PATH.exists():
-            raise HTTPException(status_code=400, detail="Data folder not found.")
-
-        txt_files = list(DATA_PATH.glob("*.txt"))
+        txt_files = get_txt_files()
 
         if not txt_files:
-            raise HTTPException(
-                status_code=400,
-                detail="No .txt documents found in data folder.",
-            )
+            raise HTTPException(status_code=400, detail="No .txt documents found.")
 
         for file_path in txt_files:
-            document_engine = build_single_file_query_engine(str(file_path))
+            document_engine = build_single_file_query_engine(file_path)
 
             tool_name = file_path.stem.replace("-", "_").replace(" ", "_")
             tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
 
+            preview_text = get_document_preview(file_path)
+
             document_tool = QueryEngineTool.from_defaults(
                 query_engine=document_engine,
                 name=f"{tool_name}_document_tool",
-                description=(
-                    f"Use this tool to answer questions from the document named "
-                    f"{file_path.name}. This document may contain clinic policies, "
-                    f"uploaded user documents, billing details, insurance rules, "
-                    f"appointment information, or other clinic-related content."
-                ),
+                description=f"""
+Use this tool only when the user question is related to the document named {file_path.name}.
+
+Document preview:
+{preview_text}
+
+Choose this tool only when the document provides meaningful support for the user's specific question.
+""",
             )
 
             tools.append(document_tool)
@@ -846,17 +1051,19 @@ def build_dynamic_document_tools():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def collect_sources_from_all_documents(question: str):
+def collect_sources_from_relevant_documents(question: str):
     all_sources = []
     accessed_documents = []
 
-    for file_path in sorted(DATA_PATH.glob("*.txt")):
+    _, relevant_files, _ = classify_all_documents(question)
+
+    for file_path in relevant_files:
         accessed_documents.append(file_path.name)
 
         try:
-            engine = build_single_file_query_engine(str(file_path))
+            engine = build_single_file_query_engine(file_path)
             response = engine.query(question)
-            sources = extract_sources_from_response(response, max_sources=1)
+            sources = extract_sources_from_response(response, max_sources=1, min_score=0.25)
             all_sources.extend(sources)
         except Exception:
             continue
@@ -866,10 +1073,46 @@ def collect_sources_from_all_documents(question: str):
 
 async def build_multi_doc_agent_response(question: str):
     try:
-        document_tools = build_dynamic_document_tools()
+        relevance_results, relevant_files, irrelevant_documents = classify_all_documents(question)
+
+        if not relevant_files:
+            return {
+                "answer": "I checked the uploaded documents, but none of them were relevant enough to answer this question.",
+                "accessed_documents": [],
+                "sources": [],
+                "relevant_documents": [],
+                "irrelevant_documents": irrelevant_documents,
+                "relevance_results": relevance_results,
+            }
+
+        tools = []
+
+        for file_path in relevant_files:
+            document_engine = build_single_file_query_engine(file_path)
+
+            tool_name = file_path.stem.replace("-", "_").replace(" ", "_")
+            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
+
+            preview_text = get_document_preview(file_path)
+
+            document_tool = QueryEngineTool.from_defaults(
+                query_engine=document_engine,
+                name=f"{tool_name}_document_tool",
+                description=f"""
+Use this tool only when the user question is related to this document.
+
+Document name:
+{file_path.name}
+
+Document preview:
+{preview_text}
+""",
+            )
+
+            tools.append(document_tool)
 
         agent = ReActAgent(
-            tools=document_tools,
+            tools=tools,
             llm=Settings.llm,
         )
 
@@ -880,12 +1123,17 @@ User question:
 Answer clearly in plain English.
 
 Rules:
-- Mention which document or documents were useful.
+- Use only the relevant document tools.
+- Mention which documents were useful.
+- Do not use unrelated documents as evidence.
+- If the user asks which documents are irrelevant, mention the irrelevant documents separately.
 - Do not use markdown tables.
 - Do not use # headings.
 - Do not use **bold markdown**.
-- Do not use unnecessary symbols.
 - Keep the answer concise and professional.
+
+Documents classified as not relevant:
+{irrelevant_documents}
 """
 
         response = await agent.run(clean_question)
@@ -894,18 +1142,20 @@ Rules:
             clean_final_answer_prompt(question, str(response))
         )
 
-        accessed_documents, sources = collect_sources_from_all_documents(question)
+        accessed_documents, sources = collect_sources_from_relevant_documents(question)
 
         return {
             "answer": str(clean_response),
             "accessed_documents": accessed_documents,
             "sources": sources,
+            "relevant_documents": [file_path.name for file_path in relevant_files],
+            "irrelevant_documents": irrelevant_documents,
+            "relevance_results": relevance_results,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
+    
 @app.post("/multi-doc-agent/query")
 async def multi_doc_agent_query(request: QueryRequest):
     try:
@@ -915,9 +1165,14 @@ async def multi_doc_agent_query(request: QueryRequest):
             "exercise": "Dynamic Multi Document Agent",
             "question": request.question,
             "answer": result["answer"],
+
             "accessed_documents": result["accessed_documents"],
             "source_documents": unique_documents_from_sources(result["sources"]),
             "sources": result["sources"],
+
+            "relevant_documents": result["relevant_documents"],
+            "irrelevant_documents": result["irrelevant_documents"],
+            "relevance_results": result["relevance_results"],
         }
 
     except Exception as e:
@@ -925,7 +1180,7 @@ async def multi_doc_agent_query(request: QueryRequest):
 
 
 # ---------------------------------------------------------
-# Exercise 6: Multi Modal RAG
+# Exercise 6: Multimodal RAG
 # ---------------------------------------------------------
 
 @app.post("/multimodal-rag/query")
@@ -943,29 +1198,16 @@ async def multimodal_rag_query(
 
         filename = file.filename or "uploaded_file"
 
-        # PDF support
         if mime_type == "application/pdf" or filename.lower().endswith(".pdf"):
-            pdf_reader = PdfReader(io.BytesIO(file_bytes))
-            extracted_pages = []
-
-            for page_num, page in enumerate(pdf_reader.pages[:10], start=1):
-                page_text = page.extract_text() or ""
-
-                if page_text.strip():
-                    extracted_pages.append(
-                        f"\n--- Page {page_num} ---\n{page_text.strip()}"
-                    )
-
-            pdf_text = "\n".join(extracted_pages).strip()
+            pdf_text = extract_pdf_text(file_bytes, max_pages=10)
 
             if not pdf_text:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "Could not extract readable text from this PDF. "
-                        "It may be scanned/image-based."
-                    ),
+                    detail="Could not extract readable text from this PDF. It may be scanned/image-based.",
                 )
+
+            saved_as, full_pdf_text = save_pdf_as_extracted_txt(filename, file_bytes)
 
             prompt = f"""
 You are a document analysis assistant.
@@ -1012,23 +1254,23 @@ Formatting rules:
             )
 
             return {
-                "exercise": "Multi Modal RAG",
+                "exercise": "Multimodal RAG",
                 "filename": filename,
+                "saved_as": saved_as,
                 "mime_type": "application/pdf",
                 "question": question,
                 "answer": str(clean_response),
-                "accessed_documents": [filename],
-                "source_documents": [filename],
+                "accessed_documents": [saved_as],
+                "source_documents": [saved_as],
                 "sources": [
                     {
-                        "document": filename,
+                        "document": saved_as,
                         "score": None,
-                        "excerpt": pdf_text[:900],
+                        "excerpt": full_pdf_text[:900],
                     }
                 ],
             }
 
-        # Image support
         if not mime_type:
             mime_type = "image/png"
 
@@ -1041,9 +1283,9 @@ Formatting rules:
         encoded_image = base64.b64encode(file_bytes).decode("utf-8")
 
         prompt = f"""
-You are a healthcare admin AI assistant.
+You are a document analysis assistant.
 
-The user uploaded an image related to clinic operations.
+The user uploaded an image.
 
 User question:
 {question}
@@ -1095,7 +1337,7 @@ Formatting rules:
         )
 
         return {
-            "exercise": "Multi Modal RAG",
+            "exercise": "Multimodal RAG",
             "filename": filename,
             "mime_type": mime_type,
             "question": question,
