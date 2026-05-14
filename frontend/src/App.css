@@ -983,3 +983,25 @@ textarea {
   }
 }
 
+textarea,
+input,
+.document-editor,
+.question-input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  background-color: #ffffff !important;
+  caret-color: #0f172a !important;
+}
+
+textarea::placeholder,
+input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+textarea:focus,
+input:focus {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
