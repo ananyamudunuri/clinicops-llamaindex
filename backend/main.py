@@ -1071,91 +1071,243 @@ def collect_sources_from_relevant_documents(question: str):
     return accessed_documents, all_sources
 
 
-async def build_multi_doc_agent_response(question: str):
+def audit_single_document_for_question(question: str, file_path: Path) -> dict:
+    """
+    Multi Document Agent helper.
+    This checks every document one by one and decides:
+    - Is it relevant to the question?
+    - What does it contain?
+    - What useful evidence does it provide?
+    No hardcoding. It works for any uploaded .txt document.
+    """
     try:
-        relevance_results, relevant_files, irrelevant_documents = classify_all_documents(question)
+        preview = get_document_preview(file_path, max_chars=2500)
 
-        if not relevant_files:
-            return {
-                "answer": "I checked the uploaded documents, but none of them were relevant enough to answer this question.",
-                "accessed_documents": [],
-                "sources": [],
-                "relevant_documents": [],
-                "irrelevant_documents": irrelevant_documents,
-                "relevance_results": relevance_results,
-            }
-
-        tools = []
-
-        for file_path in relevant_files:
-            document_engine = build_single_file_query_engine(file_path)
-
-            tool_name = file_path.stem.replace("-", "_").replace(" ", "_")
-            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
-
-            preview_text = get_document_preview(file_path)
-
-            document_tool = QueryEngineTool.from_defaults(
-                query_engine=document_engine,
-                name=f"{tool_name}_document_tool",
-                description=f"""
-Use this tool only when the user question is related to this document.
+        prompt = f"""
+User question:
+{question}
 
 Document name:
 {file_path.name}
 
 Document preview:
-{preview_text}
-""",
-            )
+{preview}
 
-            tools.append(document_tool)
+Analyze this document for the user's question.
 
-        agent = ReActAgent(
-            tools=tools,
-            llm=Settings.llm,
+Return exactly in this format:
+
+Label: Relevant or Not Relevant
+Contains: one short description of what this document contains
+Reason: one short reason why it is relevant or not relevant
+Useful Evidence: short evidence from the document if relevant, otherwise write None
+
+Important meaning of Label:
+- Relevant means this document belongs to, supports, or is useful for the topic or knowledge base mentioned in the user's question.
+- Not Relevant means this document does not belong to that topic or knowledge base.
+- If the user asks which documents are irrelevant, do not mark an unrelated document as Relevant just because it helps prove irrelevance. Keep the label based on the document's actual relationship to the requested topic or knowledge base.
+
+Rules:
+- You must classify this specific document.
+- Do not classify based on hardcoded document names.
+- Use only the document name and preview.
+- Do not mark a document relevant just because it shares one broad or generic word with the question.
+- If the question asks about clinic policy, scheduling, billing, insurance, cancellation, urgent care, or clinic operations, classify based on whether the document actually supports those clinic operations topics.
+- If the question asks about a different topic, classify based on that topic instead.
+"""
+
+        response = Settings.llm.complete(prompt)
+        text = str(response).strip()
+
+        label = "Not Relevant"
+        contains = ""
+        reason = ""
+        useful_evidence = ""
+
+        for line in text.splitlines():
+            lower = line.lower().strip()
+
+            if lower.startswith("label:"):
+                value = line.split(":", 1)[1].strip().lower()
+                if value.startswith("not relevant"):
+                    label = "Not Relevant"
+                elif value.startswith("relevant"):
+                    label = "Relevant"
+                else:
+                    label = "Not Relevant"
+
+            elif lower.startswith("contains:"):
+                contains = line.split(":", 1)[1].strip()
+
+            elif lower.startswith("reason:"):
+                reason = line.split(":", 1)[1].strip()
+
+            elif lower.startswith("useful evidence:"):
+                useful_evidence = line.split(":", 1)[1].strip()
+
+        if not contains:
+            contains = "Content summary was not clearly returned."
+
+        if not reason:
+            reason = "Relevance reason was not clearly returned."
+
+        return {
+            "document": file_path.name,
+            "label": label,
+            "contains": contains,
+            "reason": reason,
+            "useful_evidence": useful_evidence,
+        }
+
+    except Exception as e:
+        return {
+            "document": file_path.name,
+            "label": "Not Relevant",
+            "contains": "Could not inspect this document.",
+            "reason": str(e),
+            "useful_evidence": "None",
+        }
+
+
+async def build_multi_doc_agent_response(question: str):
+    """
+    Multi Document Agent.
+
+    This version intentionally inspects every uploaded/created/edited .txt document.
+    It then separates relevant and irrelevant documents and only uses relevant
+    documents as evidence for the main answer.
+    """
+    try:
+        txt_files = get_txt_files()
+
+        if not txt_files:
+            raise HTTPException(status_code=400, detail="No .txt documents found.")
+
+        document_audit_results = []
+        relevant_documents = []
+        irrelevant_documents = []
+        relevant_files = []
+
+        # Step 1: Multi Document Agent must inspect every document.
+        for file_path in txt_files:
+            audit = audit_single_document_for_question(question, file_path)
+            document_audit_results.append(audit)
+
+            if audit["label"] == "Relevant":
+                relevant_documents.append(
+                    {
+                        "document": audit["document"],
+                        "contains": audit["contains"],
+                        "reason": audit["reason"],
+                        "useful_evidence": audit["useful_evidence"],
+                    }
+                )
+                relevant_files.append(file_path)
+            else:
+                irrelevant_documents.append(
+                    {
+                        "document": audit["document"],
+                        "contains": audit["contains"],
+                        "reason": audit["reason"],
+                    }
+                )
+
+        # Step 2: Retrieve evidence only from relevant documents.
+        sources = []
+
+        for file_path in relevant_files:
+            try:
+                engine = build_single_file_query_engine(file_path)
+                response = engine.query(question)
+
+                file_sources = extract_sources_from_response(
+                    response,
+                    max_sources=2,
+                    min_score=0.20,
+                )
+
+                sources.extend(file_sources)
+
+            except Exception:
+                continue
+
+        relevant_text = "\n".join(
+            [
+                f"- {doc['document']}: {doc['contains']} Reason: {doc['reason']}"
+                for doc in relevant_documents
+            ]
         )
 
-        clean_question = f"""
+        irrelevant_text = "\n".join(
+            [
+                f"- {doc['document']}: {doc['contains']} Reason: {doc['reason']}"
+                for doc in irrelevant_documents
+            ]
+        )
+
+        evidence_text = "\n".join(
+            [
+                f"- {doc['document']}: {doc['useful_evidence']}"
+                for doc in relevant_documents
+                if doc.get("useful_evidence") and doc.get("useful_evidence") != "None"
+            ]
+        )
+
+        final_prompt = f"""
 User question:
 {question}
 
-Answer clearly in plain English.
+The Multi Document Agent inspected every uploaded document.
+
+Relevant documents:
+{relevant_text if relevant_text else "None"}
+
+Irrelevant documents:
+{irrelevant_text if irrelevant_text else "None"}
+
+Useful evidence from relevant documents:
+{evidence_text if evidence_text else "None"}
+
+Create the final answer.
 
 Rules:
-- Use only the relevant document tools.
-- Mention which documents were useful.
-- Do not use unrelated documents as evidence.
-- If the user asks which documents are irrelevant, mention the irrelevant documents separately.
+- Clearly say that every document was checked.
+- If the user asks which documents are irrelevant, list all irrelevant documents and what they contain.
+- If the user asks which documents are relevant, list all relevant documents and why.
+- Do not use irrelevant documents as evidence for the main topic answer.
+- Do not hide irrelevant documents when the user explicitly asks for them.
 - Do not use markdown tables.
 - Do not use # headings.
 - Do not use **bold markdown**.
-- Keep the answer concise and professional.
-
-Documents classified as not relevant:
-{irrelevant_documents}
+- Keep the answer clear and professional.
 """
 
-        response = await agent.run(clean_question)
+        final_response = Settings.llm.complete(final_prompt)
 
         clean_response = Settings.llm.complete(
-            clean_final_answer_prompt(question, str(response))
+            clean_final_answer_prompt(question, str(final_response))
         )
-
-        accessed_documents, sources = collect_sources_from_relevant_documents(question)
 
         return {
             "answer": str(clean_response),
-            "accessed_documents": accessed_documents,
+
+            # Every document was inspected.
+            "accessed_documents": [file_path.name for file_path in txt_files],
+
+            # Only relevant documents are treated as evidence documents.
+            "source_documents": [doc["document"] for doc in relevant_documents],
             "sources": sources,
-            "relevant_documents": [file_path.name for file_path in relevant_files],
+
+            # Extra audit details.
+            "relevant_documents": relevant_documents,
             "irrelevant_documents": irrelevant_documents,
-            "relevance_results": relevance_results,
+            "document_audit_results": document_audit_results,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @app.post("/multi-doc-agent/query")
 async def multi_doc_agent_query(request: QueryRequest):
     try:
@@ -1166,13 +1318,17 @@ async def multi_doc_agent_query(request: QueryRequest):
             "question": request.question,
             "answer": result["answer"],
 
+            # This should show every document because Multi Document Agent audits every file.
             "accessed_documents": result["accessed_documents"],
-            "source_documents": unique_documents_from_sources(result["sources"]),
+
+            # This should show only relevant documents used as evidence.
+            "source_documents": result["source_documents"],
             "sources": result["sources"],
 
+            # Full audit data for debugging/frontend use.
             "relevant_documents": result["relevant_documents"],
             "irrelevant_documents": result["irrelevant_documents"],
-            "relevance_results": result["relevance_results"],
+            "document_audit_results": result["document_audit_results"],
         }
 
     except Exception as e:
